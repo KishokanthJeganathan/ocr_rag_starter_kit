@@ -13,7 +13,7 @@ runs and can be demonstrated.
 |------:|-------|--------|
 | 0 | Repo + infra skeleton | ✅ done |
 | 1 | Synthetic NDA generator (fixture factory) | ✅ done |
-| 2 | Ingestion service | ⬜ |
+| 2 | Ingestion service | ✅ done |
 | 3 | OCR & layout layer | ⬜ |
 | 4 | Classification + schema registry | ⬜ |
 | 5 | Structured extraction | ⬜ |
@@ -44,6 +44,24 @@ uv run python -m generator make --type nda --count 5 --out ../fixtures
 
 See [generator/README.md](generator/README.md) for all flags (`--kind`,
 `--violation`, `--scanned`, `--seed`). `fixtures/` is git-ignored.
+
+## Ingesting a document
+
+```bash
+make seed          # creates a demo tenant + matter, prints their ids
+curl -F file=@fixtures/nda_01000.pdf \
+     -F matter_id=00000000-0000-0000-0000-000000000002 \
+     -H 'X-Tenant-Id: 00000000-0000-0000-0000-000000000001' \
+     http://localhost:8000/v1/documents
+```
+
+The upload is sniffed (PDF/PNG/JPG/DOCX), hashed (SHA-256), deduplicated per
+tenant, stored in MinIO/S3 at `{tenant}/{sha256}.{ext}`, recorded in `documents`,
+and queued to the worker. Every step writes an `audit_log` row.
+
+To use real AWS S3 instead of MinIO, set `AWS_ACCESS_KEY_ID`,
+`AWS_SECRET_ACCESS_KEY`, `AWS_REGION`, `S3_BUCKET` and blank `S3_ENDPOINT_URL` in
+`backend/.env`.
 
 ## Quickstart (local)
 

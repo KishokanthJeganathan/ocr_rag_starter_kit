@@ -69,8 +69,6 @@ services:
       S3_ENDPOINT_URL: http://minio:9000
     volumes:
       - ./backend:/app
-      # Keep the image's virtualenv from being shadowed by the source bind mount.
-      - backend_venv:/app/.venv
     ports:
       - "8000:8000"
     healthcheck:
@@ -94,7 +92,6 @@ services:
       S3_ENDPOINT_URL: http://minio:9000
     volumes:
       - ./backend:/app
-      - backend_venv:/app/.venv
     depends_on:
       postgres:
         condition: service_healthy
@@ -106,4 +103,3 @@ services:
 volumes:
   pgdata:
   miniodata:
-  backend_venv:

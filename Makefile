@@ -1,7 +1,7 @@
 .DEFAULT_GOAL := help
 COMPOSE := docker compose
 
-.PHONY: help up down nuke logs ps migrate revision shell-db test lint fmt typecheck check gen gen-check
+.PHONY: help up down nuke logs ps migrate seed revision shell-db test lint fmt typecheck check gen gen-check
 
 help:  ## Show available targets
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) \
@@ -24,6 +24,9 @@ ps:  ## Show service status
 
 migrate:  ## Apply database migrations
 	$(COMPOSE) run --rm api alembic upgrade head
+
+seed:  ## Create the demo tenant + matter
+	$(COMPOSE) run --rm api python -m scripts.seed
 
 revision:  ## Autogenerate a migration: make revision m="add x"
 	$(COMPOSE) run --rm api alembic revision --autogenerate -m "$(m)"

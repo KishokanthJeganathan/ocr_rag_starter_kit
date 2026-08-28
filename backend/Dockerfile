@@ -4,10 +4,12 @@ ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     UV_COMPILE_BYTECODE=1 \
     UV_LINK_MODE=copy \
-    PATH="/app/.venv/bin:$PATH"
+    # venv lives outside /app so the source bind-mount can't shadow it.
+    UV_PROJECT_ENVIRONMENT=/opt/venv \
+    PATH="/opt/venv/bin:$PATH"
 
-# curl is used by the compose healthcheck tooling and is generally handy.
-RUN apt-get update && apt-get install -y --no-install-recommends curl \
+# curl: compose healthcheck.  libmagic1: python-magic file-type detection.
+RUN apt-get update && apt-get install -y --no-install-recommends curl libmagic1 \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=ghcr.io/astral-sh/uv:0.12.5 /uv /bin/uv
