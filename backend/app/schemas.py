@@ -27,6 +27,7 @@ class DocumentOut(BaseModel):
     is_scanned: bool | None
     page_count: int | None
     status: DocumentStatus
+    error: str | None
     created_at: dt.datetime
 
 

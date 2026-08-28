@@ -1,7 +1,7 @@
 .DEFAULT_GOAL := help
 COMPOSE := docker compose
 
-.PHONY: help up down nuke logs ps migrate seed revision shell-db test lint fmt typecheck check gen gen-check
+.PHONY: help up down nuke logs ps migrate seed revision shell-db test lint fmt typecheck check gen gen-check try-ocr
 
 help:  ## Show available targets
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) \
@@ -27,6 +27,9 @@ migrate:  ## Apply database migrations
 
 seed:  ## Create the demo tenant + matter
 	$(COMPOSE) run --rm api python -m scripts.seed
+
+try-ocr:  ## Upload a fixture and print its OCR layout (make try-ocr F=fixtures/nda_02000.pdf)
+	bash scripts/try-ocr.sh $(F)
 
 revision:  ## Autogenerate a migration: make revision m="add x"
 	$(COMPOSE) run --rm api alembic revision --autogenerate -m "$(m)"

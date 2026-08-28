@@ -18,8 +18,9 @@ from sqlalchemy import select
 
 from app.config import settings
 from app.db import session_scope
-from app.models import AuditLog, Matter, Tenant
+from app.models import AuditLog, Document, DocumentStatus, Matter, Tenant
 from app.worker import process_document
+from tests._textract import FakeTextractClient
 
 
 @pytest.fixture
@@ -164,14 +165,31 @@ async def test_list_and_get_are_tenant_scoped(
     assert hidden.status_code == 404
 
 
-async def test_worker_task_records_pickup(
-    client: AsyncClient, s3: None, demo: tuple[uuid.UUID, uuid.UUID]
+async def test_worker_runs_ocr_and_stores_layout(
+    client: AsyncClient,
+    s3: None,
+    demo: tuple[uuid.UUID, uuid.UUID],
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    monkeypatch.setattr("app.services.ocr._textract_client", lambda: FakeTextractClient())
     tenant_id, matter_id = demo
     created = await _upload(client, tenant_id, matter_id, _pdf())
     doc_id = created.json()["document"]["id"]
 
     await process_document({}, doc_id, str(tenant_id))
+
+    layout = await client.get(
+        f"/v1/documents/{doc_id}/layout", headers={"X-Tenant-Id": str(tenant_id)}
+    )
+    assert layout.status_code == 200
+    body = layout.json()
+    assert body["engine"] == "textract"
+    assert body["page_count"] == 1
+    assert body["pages"][0]["blocks"][0]["role"] == "title"
+    assert body["pages"][0]["image_key"].endswith("/pages/1.png")
+
+    doc = await client.get(f"/v1/documents/{doc_id}", headers={"X-Tenant-Id": str(tenant_id)})
+    assert doc.json()["status"] == "processing"
 
     async with session_scope(tenant_id) as session:
         events = (
@@ -179,6 +197,34 @@ async def test_worker_task_records_pickup(
                 select(AuditLog.event).where(AuditLog.document_id == uuid.UUID(doc_id))
             )
         ).all()
-    assert "document.uploaded" in events
-    assert "document.stored" in events
-    assert "worker.picked_up" in events
+    assert {"document.uploaded", "ocr.started", "ocr.completed"} <= set(events)
+
+
+async def test_worker_marks_document_failed_on_ocr_error(
+    client: AsyncClient,
+    s3: None,
+    demo: tuple[uuid.UUID, uuid.UUID],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def _boom(_: object) -> None:
+        raise RuntimeError("textract exploded")
+
+    monkeypatch.setattr("app.services.ocr.analyze_pages", _boom)
+    tenant_id, matter_id = demo
+    created = await _upload(client, tenant_id, matter_id, _pdf())
+    doc_id = created.json()["document"]["id"]
+
+    with pytest.raises(RuntimeError):
+        await process_document({}, doc_id, str(tenant_id))
+
+    async with session_scope(tenant_id) as session:
+        document = await session.get(Document, uuid.UUID(doc_id))
+        assert document is not None
+        assert document.status is DocumentStatus.FAILED
+        assert "textract exploded" in (document.error or "")
+        events = (
+            await session.scalars(
+                select(AuditLog.event).where(AuditLog.document_id == uuid.UUID(doc_id))
+            )
+        ).all()
+    assert "ocr.failed" in events

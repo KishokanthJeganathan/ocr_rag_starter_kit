@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.deps import get_actor, get_tenant_id, tenant_session
-from app.models import Document
+from app.models import Document, DocumentLayout
 from app.queue import enqueue_process_document
 from app.schemas import DocumentOut, UploadResult
 from app.services.ingest import IngestError, ingest_document
@@ -73,3 +73,21 @@ async def get_document(
     if document is None:
         raise HTTPException(404, "document not found")
     return document
+
+
+@router.get("/{document_id}/layout")
+async def get_document_layout(
+    document_id: uuid.UUID,
+    session: Annotated[AsyncSession, Depends(tenant_session)],
+) -> dict[str, object]:
+    row = await session.scalar(
+        select(DocumentLayout).where(DocumentLayout.document_id == document_id)
+    )
+    if row is None:
+        raise HTTPException(404, "no layout yet — the document hasn't been processed")
+    return {
+        "document_id": str(document_id),
+        "engine": row.engine,
+        "page_count": row.page_count,
+        "pages": row.layout["pages"],
+    }

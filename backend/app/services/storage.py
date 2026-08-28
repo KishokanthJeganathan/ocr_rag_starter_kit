@@ -35,6 +35,12 @@ def upload_bytes(key: str, data: bytes, content_type: str) -> None:
     _client().put_object(Bucket=settings.s3_bucket, Key=key, Body=data, ContentType=content_type)
 
 
+def download_bytes(key: str) -> bytes:
+    response = _client().get_object(Bucket=settings.s3_bucket, Key=key)
+    body: bytes = response["Body"].read()
+    return body
+
+
 def object_exists(key: str) -> bool:
     try:
         _client().head_object(Bucket=settings.s3_bucket, Key=key)

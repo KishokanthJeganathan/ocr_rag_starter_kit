@@ -1,13 +1,22 @@
-"""Environment-driven application settings."""
+"""Environment-driven application settings.
+
+One ``.env`` at the repository root is the single source of config. Docker
+Compose reads it for ``${VAR}`` interpolation; this app reads it directly (below)
+for non-Docker runs.
+"""
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+_ENV_FILE = Path(__file__).resolve().parents[2] / ".env"
 
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=_ENV_FILE,
         env_file_encoding="utf-8",
         extra="ignore",
     )
@@ -21,7 +30,9 @@ class Settings(BaseSettings):
 
     redis_url: str = "redis://localhost:6379/0"
 
-    s3_endpoint_url: str | None = "http://localhost:9000"  # empty string -> real AWS S3
+    # Storage + AWS. Empty S3_ENDPOINT_URL -> real AWS S3; a URL -> MinIO.
+    # S3_REGION is also the region for Textract.
+    s3_endpoint_url: str | None = "http://localhost:9000"
     s3_region: str = "us-east-1"
     s3_bucket: str = "ocr-rag-documents"
     aws_access_key_id: str = "minioadmin"
@@ -30,8 +41,6 @@ class Settings(BaseSettings):
     max_upload_bytes: int = 25 * 1024 * 1024
 
     # Populated in later stages.
-    azure_di_endpoint: str | None = None
-    azure_di_key: str | None = None
     anthropic_api_key: str | None = None
     voyage_api_key: str | None = None
 

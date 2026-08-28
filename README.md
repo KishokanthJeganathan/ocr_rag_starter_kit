@@ -14,7 +14,7 @@ runs and can be demonstrated.
 | 0 | Repo + infra skeleton | ✅ done |
 | 1 | Synthetic NDA generator (fixture factory) | ✅ done |
 | 2 | Ingestion service | ✅ done |
-| 3 | OCR & layout layer | ⬜ |
+| 3 | OCR & layout layer | ✅ done |
 | 4 | Classification + schema registry | ⬜ |
 | 5 | Structured extraction | ⬜ |
 | 6 | Validation funnel | ⬜ |
@@ -56,12 +56,27 @@ curl -F file=@fixtures/nda_01000.pdf \
 ```
 
 The upload is sniffed (PDF/PNG/JPG/DOCX), hashed (SHA-256), deduplicated per
-tenant, stored in MinIO/S3 at `{tenant}/{sha256}.{ext}`, recorded in `documents`,
-and queued to the worker. Every step writes an `audit_log` row.
+tenant, stored at `{tenant}/{sha256}.{ext}`, recorded in `documents`, and queued
+to the worker. The worker then runs **OCR (AWS Textract)**: it rasterizes each
+page, sends it to `analyze_document` with the LAYOUT feature, and stores the
+normalized result (`pages → blocks → {text, bbox, confidence, role}`) in
+`document_layouts`, plus a PNG per page. Every step writes an `audit_log` row.
 
-To use real AWS S3 instead of MinIO, set `AWS_ACCESS_KEY_ID`,
-`AWS_SECRET_ACCESS_KEY`, `AWS_REGION`, `S3_BUCKET` and blank `S3_ENDPOINT_URL` in
-`backend/.env`.
+```bash
+curl -H 'X-Tenant-Id: ...' http://localhost:8000/v1/documents/<id>/layout
+```
+
+## Configuration
+
+Copy `.env.example` to `.env` at the repo root (git-ignored). Docker Compose and
+the app both read it.
+
+- **Local default:** `S3_ENDPOINT_URL=http://localhost:9000` → storage is MinIO.
+  OCR still calls real Textract, so set AWS credentials if you want the worker to
+  succeed.
+- **Full AWS:** blank `S3_ENDPOINT_URL`, then set `S3_BUCKET`, `S3_REGION`,
+  `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`. The IAM user needs `s3:*` on the
+  bucket and `textract:AnalyzeDocument`.
 
 ## Quickstart (local)
 
