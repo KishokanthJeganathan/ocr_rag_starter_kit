@@ -11,9 +11,11 @@ from redis.asyncio import Redis
 from sqlalchemy import text
 
 from app import __version__
+from app.api.documents import router as documents_router
 from app.config import settings
 from app.db import engine
 from app.logging import configure_logging, get_logger
+from app.queue import close_pool
 
 configure_logging(settings.log_level)
 log = get_logger("app.main")
@@ -23,6 +25,7 @@ log = get_logger("app.main")
 async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     log.info("api.startup", environment=settings.environment, version=__version__)
     yield
+    await close_pool()
     await engine.dispose()
     log.info("api.shutdown")
 
@@ -32,6 +35,8 @@ app = FastAPI(
     version=__version__,
     lifespan=lifespan,
 )
+
+app.include_router(documents_router)
 
 
 @app.get("/health", tags=["health"])

@@ -21,11 +21,13 @@ class Settings(BaseSettings):
 
     redis_url: str = "redis://localhost:6379/0"
 
-    s3_endpoint_url: str | None = "http://localhost:9000"
+    s3_endpoint_url: str | None = "http://localhost:9000"  # empty string -> real AWS S3
     s3_region: str = "us-east-1"
     s3_bucket: str = "ocr-rag-documents"
     aws_access_key_id: str = "minioadmin"
     aws_secret_access_key: str = "minioadmin"
+
+    max_upload_bytes: int = 25 * 1024 * 1024
 
     # Populated in later stages.
     azure_di_endpoint: str | None = None
