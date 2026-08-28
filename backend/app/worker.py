@@ -1,8 +1,7 @@
 """ARQ worker.
 
 ``process_document`` runs the OCR & layout step: rasterize the original,
-Textract each page, store the normalized layout + page images. Everything after
-this (classification, extraction, validation) lands in later stages.
+Textract each page, store the normalized layout + page images.
 """
 
 from __future__ import annotations
@@ -17,7 +16,7 @@ from fastapi.concurrency import run_in_threadpool
 from app.config import settings
 from app.db import session_scope
 from app.logging import configure_logging, get_logger
-from app.models import AuditLog, Document, DocumentLayout, DocumentStatus
+from app.models import Document, DocumentLayout, DocumentStatus
 from app.services import ocr, storage
 
 configure_logging(settings.log_level)
@@ -40,15 +39,6 @@ async def process_document(_: dict[str, Any], document_id: str, tenant_id: str) 
         document.status = DocumentStatus.PROCESSING
         storage_key = document.storage_key
         content_sha256 = document.content_sha256
-        session.add(
-            AuditLog(
-                tenant_id=tid,
-                document_id=did,
-                actor="system",
-                event="ocr.started",
-                detail={"engine": "textract"},
-            )
-        )
 
     try:
         data = await run_in_threadpool(storage.download_bytes, storage_key)
@@ -75,15 +65,6 @@ async def process_document(_: dict[str, Any], document_id: str, tenant_id: str) 
                     layout=layout.to_dict(image_keys),
                 )
             )
-            session.add(
-                AuditLog(
-                    tenant_id=tid,
-                    document_id=did,
-                    actor="system",
-                    event="ocr.completed",
-                    detail={"engine": layout.engine, "pages": len(layout.pages)},
-                )
-            )
         log.info("worker.ocr_done", document_id=document_id, pages=len(layout.pages))
 
     except Exception as exc:
@@ -92,15 +73,6 @@ async def process_document(_: dict[str, Any], document_id: str, tenant_id: str) 
             if document is not None:
                 document.status = DocumentStatus.FAILED
                 document.error = f"{type(exc).__name__}: {exc}"
-            session.add(
-                AuditLog(
-                    tenant_id=tid,
-                    document_id=did,
-                    actor="system",
-                    event="ocr.failed",
-                    detail={"error": f"{type(exc).__name__}: {exc}"},
-                )
-            )
         log.error("worker.ocr_failed", document_id=document_id, error=str(exc))
         raise
 

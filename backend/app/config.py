@@ -40,10 +40,6 @@ class Settings(BaseSettings):
 
     max_upload_bytes: int = 25 * 1024 * 1024
 
-    # Populated in later stages.
-    anthropic_api_key: str | None = None
-    voyage_api_key: str | None = None
-
     @property
     def is_local(self) -> bool:
         return self.environment == "local"

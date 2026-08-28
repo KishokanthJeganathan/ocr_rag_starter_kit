@@ -10,14 +10,11 @@ from typing import TYPE_CHECKING
 
 import boto3
 from botocore.config import Config
-from botocore.exceptions import ClientError
 
 from app.config import settings
 
 if TYPE_CHECKING:
     from mypy_boto3_s3.client import S3Client
-
-_NOT_FOUND = {"404", "NoSuchKey", "NotFound"}
 
 
 def _client() -> S3Client:
@@ -39,13 +36,3 @@ def download_bytes(key: str) -> bytes:
     response = _client().get_object(Bucket=settings.s3_bucket, Key=key)
     body: bytes = response["Body"].read()
     return body
-
-
-def object_exists(key: str) -> bool:
-    try:
-        _client().head_object(Bucket=settings.s3_bucket, Key=key)
-    except ClientError as exc:
-        if exc.response["Error"]["Code"] in _NOT_FOUND:
-            return False
-        raise
-    return True

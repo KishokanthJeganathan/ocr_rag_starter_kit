@@ -12,7 +12,7 @@ from fastapi.concurrency import run_in_threadpool
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import AuditLog, Document, Matter
+from app.models import Document, Matter
 from app.models.enums import SourceFormat
 from app.services import detect, storage
 
@@ -46,7 +46,6 @@ async def ingest_document(
     matter_id: uuid.UUID,
     filename: str,
     data: bytes,
-    actor: str,
 ) -> Ingested:
     fmt = detect.detect_format(data)
     if fmt is None:
@@ -85,24 +84,6 @@ async def ingest_document(
         page_count=page_count,
     )
     session.add(document)
-    await session.flush()  # assigns document.id
+    await session.flush()  # assigns document.id and server-default columns
 
-    session.add_all(
-        [
-            AuditLog(
-                tenant_id=tenant_id,
-                document_id=document.id,
-                actor=actor,
-                event="document.uploaded",
-                detail={"filename": filename, "bytes": len(data), "sha256": digest},
-            ),
-            AuditLog(
-                tenant_id=tenant_id,
-                document_id=document.id,
-                actor="system",
-                event="document.stored",
-                detail={"storage_key": storage_key},
-            ),
-        ]
-    )
     return Ingested(document=document, duplicate=False)

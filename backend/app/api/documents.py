@@ -10,7 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
-from app.deps import get_actor, get_tenant_id, tenant_session
+from app.deps import get_tenant_id, tenant_session
 from app.models import Document, DocumentLayout
 from app.queue import enqueue_process_document
 from app.schemas import DocumentOut, UploadResult
@@ -22,7 +22,6 @@ router = APIRouter(prefix="/v1/documents", tags=["documents"])
 @router.post("", response_model=UploadResult, status_code=201)
 async def upload_document(
     tenant_id: Annotated[uuid.UUID, Depends(get_tenant_id)],
-    actor: Annotated[str, Depends(get_actor)],
     session: Annotated[AsyncSession, Depends(tenant_session)],
     matter_id: Annotated[uuid.UUID, Form()],
     file: Annotated[UploadFile, File()],
@@ -40,7 +39,6 @@ async def upload_document(
             matter_id=matter_id,
             filename=file.filename or "upload",
             data=data,
-            actor=actor,
         )
     except IngestError as exc:
         raise HTTPException(exc.status_code, exc.detail) from None
