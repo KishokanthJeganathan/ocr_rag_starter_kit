@@ -23,9 +23,7 @@ dist/
 
 # Data / scratch
 data/
-fixtures/*.pdf
-fixtures/*.png
-fixtures/*.jpg
+fixtures/
 *.log
 
 # OS / editors

@@ -11,8 +11,8 @@ runs and can be demonstrated.
 
 | Stage | Title | Status |
 |------:|-------|--------|
-| 0 | Repo + infra skeleton | ✅ in progress |
-| 1 | Synthetic NDA generator (fixture factory) | ⬜ |
+| 0 | Repo + infra skeleton | ✅ done |
+| 1 | Synthetic NDA generator (fixture factory) | ✅ done |
 | 2 | Ingestion service | ⬜ |
 | 3 | OCR & layout layer | ⬜ |
 | 4 | Classification + schema registry | ⬜ |
@@ -30,10 +30,20 @@ runs and can be demonstrated.
 ```
 backend/     FastAPI API + ARQ worker, SQLAlchemy models, Alembic migrations
 frontend/    Review UI (Next.js) — added in Stage 7
-generator/   Synthetic document generator — added in Stage 1
+generator/   Synthetic NDA generator (standalone package with its own venv)
 evals/       Golden-set evaluation harness — added in Stage 10
 infra/       Terraform + local bootstrap — Postgres init script now, AWS in Stage 11
 ```
+
+## Generating test documents
+
+```bash
+cd generator && uv sync
+uv run python -m generator make --type nda --count 5 --out ../fixtures
+```
+
+See [generator/README.md](generator/README.md) for all flags (`--kind`,
+`--violation`, `--scanned`, `--seed`). `fixtures/` is git-ignored.
 
 ## Quickstart (local)
 

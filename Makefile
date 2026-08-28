@@ -1,7 +1,7 @@
 .DEFAULT_GOAL := help
 COMPOSE := docker compose
 
-.PHONY: help up down nuke logs ps migrate revision shell-db test lint fmt typecheck check
+.PHONY: help up down nuke logs ps migrate revision shell-db test lint fmt typecheck check gen gen-check
 
 help:  ## Show available targets
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) \
@@ -43,4 +43,10 @@ fmt:  ## Auto-fix lint + format
 typecheck:  ## Run mypy
 	cd backend && uv run mypy app
 
-check: lint typecheck test  ## Run every check
+check: lint typecheck test  ## Run every backend check
+
+gen:  ## Generate sample fixtures into fixtures/ (make gen N=5)
+	cd generator && uv run python -m generator make --type nda --count $(or $(N),5) --out ../fixtures
+
+gen-check:  ## Lint + type-check + test the generator
+	cd generator && uv run ruff check . && uv run ruff format --check . && uv run mypy src && uv run pytest -q
