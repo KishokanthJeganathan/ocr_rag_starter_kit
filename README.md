@@ -33,6 +33,7 @@ export API.
 
 ```
 backend/     FastAPI API + ARQ worker, SQLAlchemy models, Alembic migrations
+web/         Next.js read-only review UI (extraction + validation viewer)
 generator/   Synthetic NDA generator (standalone package with its own venv)
 infra/       Postgres bootstrap now; AWS Terraform later
 ```
@@ -81,6 +82,21 @@ The document ends at `status = processed`. Classification and extraction are
 best-effort: if an LLM call fails the document is still `processed` (OCR already
 succeeded) — just without a `doc_type`, extraction, or validation row.
 
+## Review UI
+
+A **read-only** Next.js viewer for what the pipeline produced — a document list
+with verdict badges, and a per-document page showing the scan next to the
+extracted fields (value · confidence · evidence) with the failing fields
+highlighted. Editing, approval, and corrections are Phase 3.
+
+```bash
+make web-install     # first time only
+make web             # http://localhost:3100  (needs `make up` running)
+```
+
+It runs on the host (not in Compose) and talks to the API at
+`http://localhost:8000` as the demo tenant. Config: `web/.env.local`.
+
 ## Configuration
 
 Copy `.env.example` to `.env` at the repo root (git-ignored). Docker Compose and
@@ -110,9 +126,10 @@ curl localhost:8000/health/ready    # -> checks database + redis
 make check       # ruff + mypy + pytest (runs against the running postgres)
 ```
 
-Ports: API `8000`, Postgres `5433` (host) → `5432` (container), Redis `6379`,
-MinIO API `9000`, MinIO console `9001` (`minioadmin` / `minioadmin`). Postgres is
-on `5433` so it doesn't collide with a native install on `5432`.
+Ports: API `8000`, review UI `3100` (host, `make web`), Postgres `5433` (host) →
+`5432` (container), Redis `6379`, MinIO API `9000`, MinIO console `9001`
+(`minioadmin` / `minioadmin`). Postgres is on `5433` so it doesn't collide with a
+native install on `5432`.
 
 ## Foundations
 

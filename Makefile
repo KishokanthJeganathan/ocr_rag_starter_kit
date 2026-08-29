@@ -1,7 +1,7 @@
 .DEFAULT_GOAL := help
 COMPOSE := docker compose
 
-.PHONY: help up down nuke logs ps migrate seed revision shell-db test lint fmt typecheck check gen gen-check try-ocr
+.PHONY: help up down nuke logs ps migrate seed revision shell-db test lint fmt typecheck check gen gen-check try-ocr web web-install
 
 help:  ## Show available targets
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) \
@@ -56,3 +56,9 @@ gen:  ## Generate sample fixtures into fixtures/ (make gen N=5)
 
 gen-check:  ## Lint + type-check + test the generator
 	cd generator && uv run ruff check . && uv run ruff format --check . && uv run mypy src && uv run pytest -q
+
+web-install:  ## Install the review UI's dependencies
+	cd web && npm install
+
+web:  ## Run the read-only review UI on http://localhost:3100 (needs `make up`)
+	cd web && npm run dev

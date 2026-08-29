@@ -5,7 +5,8 @@ from __future__ import annotations
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Response, UploadFile
+from fastapi.concurrency import run_in_threadpool
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -14,6 +15,7 @@ from app.deps import get_tenant_id, tenant_session
 from app.models import Document, DocumentExtraction, DocumentLayout, DocumentValidation
 from app.queue import enqueue_process_document
 from app.schemas import DocumentOut, UploadResult
+from app.services import storage
 from app.services.ingest import IngestError, ingest_document
 
 router = APIRouter(prefix="/v1/documents", tags=["documents"])
@@ -124,3 +126,21 @@ async def get_document_validation(
         "verdict": row.verdict,
         "issues": row.issues,
     }
+
+
+@router.get("/{document_id}/pages/{page_no}.png")
+async def get_document_page_image(
+    document_id: uuid.UUID,
+    page_no: int,
+    session: Annotated[AsyncSession, Depends(tenant_session)],
+) -> Response:
+    row = await session.scalar(
+        select(DocumentLayout).where(DocumentLayout.document_id == document_id)
+    )
+    if row is None:
+        raise HTTPException(404, "no layout yet — the document hasn't been processed")
+    page = next((p for p in row.layout["pages"] if p["number"] == page_no), None)
+    if page is None or not page.get("image_key"):
+        raise HTTPException(404, "no image for that page")
+    data = await run_in_threadpool(storage.download_bytes, page["image_key"])
+    return Response(content=data, media_type="image/png")

@@ -2,7 +2,8 @@
 
 What's in the tree today, and how a request flows through it. Scope: **upload a
 document → OCR it → classify it → (if NDA) extract its fields → validate them →
-read it all back.** RAG and the review UI are not here yet.
+view it all in a read-only UI.** RAG and an editable review workflow are not
+here yet.
 
 ## Moving parts
 
@@ -10,6 +11,7 @@ read it all back.** RAG and the review UI are not here yet.
 |---|---|---|
 | **api** | FastAPI HTTP service | `backend/app/main.py`, `backend/app/api/` |
 | **worker** | ARQ background worker (one process, pulls jobs from Redis) | `backend/app/worker.py` |
+| **web** | Next.js read-only review UI (runs on the host, not in Compose) | `web/app/` |
 | **Postgres** | metadata: tenants, matters, documents, OCR layouts | `backend/app/models/`, `backend/alembic/` |
 | **Redis** | the job queue between api and worker | `backend/app/queue.py` |
 | **MinIO / S3** | the original file bytes + rasterized page PNGs | `backend/app/services/storage.py` |
@@ -59,11 +61,12 @@ read it all back.** RAG and the review UI are not here yet.
   │  … on an OCR error: status -> failed, error = "…"          │
   └─────────────────────────────────────────────────────────────┘
 
-  GET /v1/documents/{id}/layout      -> the normalized layout JSON
-  GET /v1/documents/{id}/extraction  -> the extracted fields (NDA only)
-  GET /v1/documents/{id}/validation  -> verdict + issues (NDA only)
-  GET /v1/documents/{id}             -> the document row (status, doc_type, ...)
-  GET /v1/documents                  -> this tenant's documents
+  GET /v1/documents/{id}/layout        -> the normalized layout JSON
+  GET /v1/documents/{id}/extraction    -> the extracted fields (NDA only)
+  GET /v1/documents/{id}/validation    -> verdict + issues (NDA only)
+  GET /v1/documents/{id}/pages/{n}.png -> the rasterized page image (from S3)
+  GET /v1/documents/{id}               -> the document row (status, doc_type, ...)
+  GET /v1/documents                    -> this tenant's documents
 ```
 
 ## Every file
@@ -115,6 +118,15 @@ read it all back.** RAG and the review UI are not here yet.
 | `scripts/try-ocr.sh` | upload a fixture, wait, print the layout (`make try-ocr`) |
 | `tests/` | `test_rls`, `test_detect`, `test_ocr`, `test_classify`, `test_extract`, `test_validate`, `test_documents_api`, `test_health` |
 
+**Review UI** (`web/`, Next.js App Router, all Server Components — no client data layer)
+| File | Role |
+|---|---|
+| `app/lib/api.ts` | typed `fetch` wrappers + response types, tenant header |
+| `app/page.tsx` | document list with verdict badges |
+| `app/documents/[id]/page.tsx` | detail: page images ∥ fields (value·confidence·evidence) + issues |
+| `app/documents/[id]/pages/[page]/route.ts` | proxies the page PNG, adds the tenant header |
+| `app/globals.css` | the whole stylesheet (no framework) |
+
 ## Data model
 
 ```
@@ -138,5 +150,7 @@ tenants ──1:n── matters ──1:n── documents ──1:1── docume
 ## Deliberately not here yet
 
 - **Chunking, embeddings, vector search, RAG** — Phase 2.
-- **Review UI, corrections, approval snapshots, audit log, export** — Phase 3.
-- **Real auth** — currently a trusted `X-Tenant-Id` header.
+- **Field editing, corrections history, approval snapshots, audit log, export** —
+  Phase 3. The `web/` UI today is read-only.
+- **Real auth** — currently a trusted `X-Tenant-Id` header; the UI hard-codes the
+  demo tenant.

@@ -252,6 +252,13 @@ async def test_worker_runs_ocr_classifies_and_stores_layout(
     assert validation.json()["verdict"] == "passed"
     assert validation.json()["issues"] == []
 
+    image = await client.get(
+        f"/v1/documents/{doc_id}/pages/1.png", headers={"X-Tenant-Id": str(tenant_id)}
+    )
+    assert image.status_code == 200
+    assert image.headers["content-type"] == "image/png"
+    assert image.content[:8] == b"\x89PNG\r\n\x1a\n"
+
 
 async def test_worker_still_processes_when_classifier_fails(
     client: AsyncClient,
