@@ -21,4 +21,15 @@ class DocumentStatus(enum.StrEnum):
 
     QUEUED = "queued"
     PROCESSING = "processing"
+    PROCESSED = "processed"  # OCR + classification finished
     FAILED = "failed"
+
+
+class DocumentType(enum.StrEnum):
+    """What kind of document this is, decided by the classifier after OCR.
+    ``None`` on the row means not classified yet (or the classifier abstained).
+    """
+
+    NDA = "nda"
+    INVOICE = "invoice"
+    OTHER = "other"

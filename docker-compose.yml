@@ -72,6 +72,7 @@ services:
       S3_BUCKET: ${S3_BUCKET-ocr-rag-documents}
       AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID-minioadmin}
       AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY-minioadmin}
+      OPENAI_API_KEY: ${OPENAI_API_KEY-}
     volumes:
       - ./backend:/app
     ports:
@@ -99,6 +100,7 @@ services:
       S3_BUCKET: ${S3_BUCKET-ocr-rag-documents}
       AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID-minioadmin}
       AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY-minioadmin}
+      OPENAI_API_KEY: ${OPENAI_API_KEY-}
     volumes:
       - ./backend:/app
     depends_on:

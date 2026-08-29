@@ -1,7 +1,8 @@
 """ARQ worker.
 
-``process_document`` runs the OCR & layout step: rasterize the original,
-Textract each page, store the normalized layout + page images.
+``process_document`` runs the post-upload pipeline: rasterize the original,
+Textract each page, store the normalized layout + page images, then classify
+the document type. Classification is best-effort — OCR has already succeeded.
 """
 
 from __future__ import annotations
@@ -17,7 +18,7 @@ from app.config import settings
 from app.db import session_scope
 from app.logging import configure_logging, get_logger
 from app.models import Document, DocumentLayout, DocumentStatus
-from app.services import ocr, storage
+from app.services import classify, ocr, storage
 
 configure_logging(settings.log_level)
 log = get_logger("app.worker")
@@ -25,6 +26,17 @@ log = get_logger("app.worker")
 
 async def ping(_: dict[str, Any]) -> str:
     return "pong"
+
+
+async def _classify(layout: ocr.OcrLayout) -> classify.Classification | None:
+    """Best-effort: a classifier failure must not lose a successful OCR."""
+    try:
+        result = await run_in_threadpool(classify.classify_document, layout)
+    except Exception as exc:
+        log.warning("worker.classify_failed", error=f"{type(exc).__name__}: {exc}")
+        return None
+    log.info("worker.classified", doc_type=result.doc_type, confidence=result.confidence)
+    return result
 
 
 async def process_document(_: dict[str, Any], document_id: str, tenant_id: str) -> None:
@@ -51,11 +63,17 @@ async def process_document(_: dict[str, Any], document_id: str, tenant_id: str) 
             await run_in_threadpool(storage.upload_bytes, key, page.png, "image/png")
             image_keys[number] = key
 
+        classification = await _classify(layout)
+
         async with session_scope(tid) as session:
             document = await session.get(Document, did)
             if document is None:
                 return
             document.page_count = len(layout.pages)
+            document.status = DocumentStatus.PROCESSED
+            if classification is not None:
+                document.doc_type = classification.doc_type
+                document.doc_type_confidence = classification.confidence
             session.add(
                 DocumentLayout(
                     tenant_id=tid,
@@ -65,7 +83,12 @@ async def process_document(_: dict[str, Any], document_id: str, tenant_id: str) 
                     layout=layout.to_dict(image_keys),
                 )
             )
-        log.info("worker.ocr_done", document_id=document_id, pages=len(layout.pages))
+        log.info(
+            "worker.processed",
+            document_id=document_id,
+            pages=len(layout.pages),
+            doc_type=classification.doc_type if classification else None,
+        )
 
     except Exception as exc:
         async with session_scope(tid) as session:

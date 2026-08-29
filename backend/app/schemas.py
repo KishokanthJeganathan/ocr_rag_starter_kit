@@ -11,7 +11,7 @@ import uuid
 
 from pydantic import BaseModel, ConfigDict
 
-from app.models.enums import DocumentStatus, SourceFormat
+from app.models.enums import DocumentStatus, DocumentType, SourceFormat
 
 
 class DocumentOut(BaseModel):
@@ -27,6 +27,8 @@ class DocumentOut(BaseModel):
     is_scanned: bool | None
     page_count: int | None
     status: DocumentStatus
+    doc_type: DocumentType | None
+    doc_type_confidence: float | None
     error: str | None
     created_at: dt.datetime
 

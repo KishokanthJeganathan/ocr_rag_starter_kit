@@ -44,8 +44,12 @@ document → OCR it → read back the positioned text.** Nothing else exists yet
   │ ocr.analyze_pages(pages)     each PNG -> AWS Textract        │
   │                              LAYOUT blocks -> OcrLayout      │
   │ storage.upload_bytes(...)    a PNG per page                  │
+  │ classify.classify_document   page-1 text -> OpenAI ->        │
+  │                              doc_type + confidence (best-effort)│
   │ INSERT document_layouts      (normalized JSON)              │
-  │  … on any error: status -> failed, error = "…"             │
+  │ UPDATE documents             doc_type, confidence,          │
+  │                              status -> processed            │
+  │  … on an OCR error: status -> failed, error = "…"          │
   └─────────────────────────────────────────────────────────────┘
 
   GET /v1/documents/{id}/layout   -> the normalized layout JSON
@@ -71,11 +75,12 @@ document → OCR it → read back the positioned text.** Nothing else exists yet
 | `detect.py` | file type (python-magic) + scanned-vs-digital + page count (PyMuPDF) |
 | `storage.py` | thin boto3 wrapper — `upload_bytes` / `download_bytes` (MinIO or S3) |
 | `ocr.py` | `rasterize` (pages → PNG) + `analyze_pages` (Textract → normalized `OcrLayout`) |
+| `classify.py` | page-1 text → OpenAI → `Classification` (`doc_type`, `confidence`, `rationale`) |
 
 **Worker**
 | File | Role |
 |---|---|
-| `app/worker.py` | `process_document` job = the OCR step; `WorkerSettings` registers it |
+| `app/worker.py` | `process_document` job = OCR + classification; `WorkerSettings` registers it |
 | `app/queue.py` | the Redis connection the api uses to enqueue jobs |
 
 **Data**
@@ -87,7 +92,7 @@ document → OCR it → read back the positioned text.** Nothing else exists yet
 | `app/models/layout.py` | `document_layouts` — the OCR result, one row per document |
 | `app/models/enums.py` | `SourceFormat`, `DocumentStatus` |
 | `app/models/base.py` | declarative base + `created_at`/`updated_at` mixin |
-| `alembic/versions/0001…0003` | the three migrations that build those tables + RLS |
+| `alembic/versions/0001…0004` | migrations: tenants/matters, documents, layouts, classification cols |
 
 **Support**
 | File | Role |
@@ -95,7 +100,7 @@ document → OCR it → read back the positioned text.** Nothing else exists yet
 | `app/logging.py` | structlog JSON logging |
 | `scripts/seed.py` | create the demo tenant + matter (`make seed`) |
 | `scripts/try-ocr.sh` | upload a fixture, wait, print the layout (`make try-ocr`) |
-| `tests/` | `test_rls` (isolation), `test_detect`, `test_ocr`, `test_documents_api`, `test_health` |
+| `tests/` | `test_rls` (isolation), `test_detect`, `test_ocr`, `test_classify`, `test_documents_api`, `test_health` |
 
 ## Data model
 
@@ -104,15 +109,16 @@ tenants ──1:n── matters ──1:n── documents ──1:1── docume
 ```
 
 - **tenants / matters** — every other table carries `tenant_id`; RLS filters on it.
-- **documents** — `status` (queued → processing → failed), `source_format`,
-  `is_scanned`, `page_count`, `content_sha256` (unique per tenant), `storage_key`,
-  `error`.
+- **documents** — `status` (queued → processing → processed / failed),
+  `source_format`, `is_scanned`, `page_count`, `content_sha256` (unique per
+  tenant), `storage_key`, `error`, `doc_type` (`nda`/`invoice`/`other`, nullable),
+  `doc_type_confidence`.
 - **document_layouts** — `engine`, `page_count`, `layout` JSONB:
   `{ pages: [ { number, width, height, image_key, blocks: [ { text, bbox, confidence, role } ] } ] }`.
 
 ## Deliberately not here yet
 
-- **Classification, LLM extraction, validation** — the rest of Phase 1.
+- **LLM extraction, validation** — the rest of Phase 1.
 - **Chunking, embeddings, vector search, RAG** — Phase 2.
 - **Review UI, corrections, approval snapshots, audit log, export** — Phase 3.
 - **Real auth** — currently a trusted `X-Tenant-Id` header.

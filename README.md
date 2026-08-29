@@ -13,7 +13,7 @@ approvals, and RAG are added when we reach them, not before. See
 |---|---|
 | Ingest an upload (detect, hash, dedup, store) | ✅ |
 | OCR & layout (AWS Textract → positioned text blocks) | ✅ |
-| Classify the document type | ⬜ |
+| Classify the document type (OpenAI → `nda` / `invoice` / `other` + confidence) | ✅ |
 | LLM turns layout blocks into structured fields against a schema | ⬜ |
 | Validation rules | ⬜ |
 
@@ -61,6 +61,12 @@ send it to `analyze_document` with the LAYOUT feature, and store the normalized
 result (`pages → blocks → {text, bbox, confidence, role}`) in `document_layouts`,
 plus a PNG per page. Read it back at `GET /v1/documents/{id}/layout`.
 
+Finally it **classifies** the document — the first page's text goes to OpenAI,
+which returns `doc_type` (`nda` / `invoice` / `other`) + a confidence, stored on
+the `documents` row. The document ends at `status = processed`. Classification is
+best-effort: if the LLM call fails the document is still `processed` with a null
+`doc_type` (OCR already succeeded).
+
 ## Configuration
 
 Copy `.env.example` to `.env` at the repo root (git-ignored). Docker Compose and
@@ -72,6 +78,10 @@ the app both read it.
 - **Full AWS:** blank `S3_ENDPOINT_URL`, then set `S3_BUCKET`, `S3_REGION`,
   `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`. The IAM user needs `s3:*` on the
   bucket and `textract:AnalyzeDocument`.
+- **Classification:** set `OPENAI_API_KEY` (from
+  [platform.openai.com](https://platform.openai.com), needs prepaid credits).
+  Without it the worker still runs OCR; documents finish `processed` with a null
+  `doc_type`.
 
 ## Quickstart (local)
 

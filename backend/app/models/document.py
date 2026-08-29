@@ -8,6 +8,7 @@ from sqlalchemy import (
     BigInteger,
     Boolean,
     Enum,
+    Float,
     ForeignKey,
     Integer,
     String,
@@ -17,7 +18,7 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base, TimestampMixin
-from app.models.enums import DocumentStatus, SourceFormat
+from app.models.enums import DocumentStatus, DocumentType, SourceFormat
 
 
 class Document(Base, TimestampMixin):
@@ -59,3 +60,10 @@ class Document(Base, TimestampMixin):
         nullable=False,
     )
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    # Set by the classifier after OCR; null until then / if it abstains.
+    doc_type: Mapped[DocumentType | None] = mapped_column(
+        Enum(DocumentType, name="document_type", values_callable=lambda e: [m.value for m in e]),
+        nullable=True,
+    )
+    doc_type_confidence: Mapped[float | None] = mapped_column(Float, nullable=True)

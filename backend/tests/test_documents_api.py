@@ -17,7 +17,8 @@ from moto import mock_aws
 
 from app.config import settings
 from app.db import session_scope
-from app.models import Document, DocumentStatus, Matter, Tenant
+from app.models import Document, DocumentStatus, DocumentType, Matter, Tenant
+from app.services.classify import Classification
 from app.worker import process_document
 from tests._textract import FakeTextractClient
 
@@ -167,13 +168,19 @@ async def test_list_and_get_are_tenant_scoped(
     assert hidden.status_code == 404
 
 
-async def test_worker_runs_ocr_and_stores_layout(
+async def test_worker_runs_ocr_classifies_and_stores_layout(
     client: AsyncClient,
     s3: None,
     demo: tuple[uuid.UUID, uuid.UUID],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr("app.services.ocr._textract_client", lambda: FakeTextractClient())
+    monkeypatch.setattr(
+        "app.services.classify.classify_document",
+        lambda _layout: Classification(
+            doc_type=DocumentType.NDA, confidence=0.96, rationale="title says so"
+        ),
+    )
     tenant_id, matter_id = demo
     created = await _upload(client, tenant_id, matter_id, _pdf())
     doc_id = created.json()["document"]["id"]
@@ -191,8 +198,33 @@ async def test_worker_runs_ocr_and_stores_layout(
     assert body["pages"][0]["image_key"].endswith("/pages/1.png")
 
     doc = await client.get(f"/v1/documents/{doc_id}", headers={"X-Tenant-Id": str(tenant_id)})
-    assert doc.json()["status"] == "processing"
+    assert doc.json()["status"] == "processed"
     assert doc.json()["page_count"] == 1
+    assert doc.json()["doc_type"] == "nda"
+    assert doc.json()["doc_type_confidence"] == 0.96
+
+
+async def test_worker_still_processes_when_classifier_fails(
+    client: AsyncClient,
+    s3: None,
+    demo: tuple[uuid.UUID, uuid.UUID],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("app.services.ocr._textract_client", lambda: FakeTextractClient())
+
+    def _boom(_layout: object) -> None:
+        raise RuntimeError("openai down")
+
+    monkeypatch.setattr("app.services.classify.classify_document", _boom)
+    tenant_id, matter_id = demo
+    created = await _upload(client, tenant_id, matter_id, _pdf())
+    doc_id = created.json()["document"]["id"]
+
+    await process_document({}, doc_id, str(tenant_id))
+
+    doc = await client.get(f"/v1/documents/{doc_id}", headers={"X-Tenant-Id": str(tenant_id)})
+    assert doc.json()["status"] == "processed"  # OCR succeeded, so the doc is not failed
+    assert doc.json()["doc_type"] is None
 
 
 async def test_worker_marks_document_failed_on_ocr_error(

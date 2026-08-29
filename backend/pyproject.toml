@@ -18,6 +18,7 @@ dependencies = [
     "python-magic>=0.4.27",
     "boto3>=1.35",
     "pymupdf>=1.24",
+    "openai>=3.6,<4",
 ]
 
 [dependency-groups]
