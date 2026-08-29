@@ -38,13 +38,17 @@ def _nda_extraction() -> NdaExtraction:
             evidence=None,
         ),
         effective_date=Extracted(value="2026-02-19", confidence=0.9, evidence=None),
+        expiry_date=Extracted(value="2029-02-19", confidence=0.9, evidence=None),
         term_years=Extracted(value=3, confidence=0.9, evidence=None),
         survival_years=Extracted(value=5, confidence=0.9, evidence=None),
         governing_law=Extracted(value="Massachusetts", confidence=0.9, evidence=None),
         has_non_compete=Extracted(value=False, confidence=0.9, evidence=None),
         non_compete_months=Extracted(value=None, confidence=0.9, evidence=None),
         signatories=Extracted(
-            value=[Signatory(party="A LLC", name="Lisa", title="CEO")],
+            value=[
+                Signatory(party="A LLC", name="Lisa", title="CEO"),
+                Signatory(party="B LLC", name="Sam", title="GC"),
+            ],
             confidence=0.9,
             evidence=None,
         ),
@@ -241,6 +245,13 @@ async def test_worker_runs_ocr_classifies_and_stores_layout(
     assert fields["governing_law"]["value"] == "Massachusetts"
     assert fields["term_years"]["confidence"] == 0.9
 
+    validation = await client.get(
+        f"/v1/documents/{doc_id}/validation", headers={"X-Tenant-Id": str(tenant_id)}
+    )
+    assert validation.status_code == 200
+    assert validation.json()["verdict"] == "passed"
+    assert validation.json()["issues"] == []
+
 
 async def test_worker_still_processes_when_classifier_fails(
     client: AsyncClient,
@@ -264,11 +275,15 @@ async def test_worker_still_processes_when_classifier_fails(
     assert doc.json()["status"] == "processed"  # OCR succeeded, so the doc is not failed
     assert doc.json()["doc_type"] is None
 
-    # No classification -> no extraction attempted.
+    # No classification -> no extraction, and nothing to validate.
     extraction = await client.get(
         f"/v1/documents/{doc_id}/extraction", headers={"X-Tenant-Id": str(tenant_id)}
     )
     assert extraction.status_code == 404
+    validation = await client.get(
+        f"/v1/documents/{doc_id}/validation", headers={"X-Tenant-Id": str(tenant_id)}
+    )
+    assert validation.status_code == 404
 
 
 async def test_worker_marks_document_failed_on_ocr_error(

@@ -10,6 +10,7 @@ from app.models.extraction import DocumentExtraction
 from app.models.layout import DocumentLayout
 from app.models.matter import Matter
 from app.models.tenant import Tenant
+from app.models.validation import DocumentValidation
 
 __all__ = [
     "Base",
@@ -18,6 +19,7 @@ __all__ = [
     "DocumentLayout",
     "DocumentStatus",
     "DocumentType",
+    "DocumentValidation",
     "Matter",
     "SourceFormat",
     "Tenant",

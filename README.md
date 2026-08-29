@@ -15,7 +15,7 @@ approvals, and RAG are added when we reach them, not before. See
 | OCR & layout (AWS Textract → positioned text blocks) | ✅ |
 | Classify the document type (OpenAI → `nda` / `invoice` / `other` + confidence) | ✅ |
 | LLM extraction — NDA fields as `{value, confidence, evidence}` against a schema | ✅ |
-| Validation rules | ⬜ |
+| Validation rules + confidence gating → `passed` / `needs_review` | ✅ |
 
 ### Phase 2 — RAG
 
@@ -70,9 +70,16 @@ OpenAI against a Pydantic schema, and each field comes back as
 `{value, confidence, evidence}` in `document_extractions`. Read it at
 `GET /v1/documents/{id}/extraction`.
 
+Then it **validates** — pure rules over the extracted fields (governing law
+present, a signature block per party, expiry after effective date, required
+fields) plus confidence gating (any field below `CONFIDENCE_THRESHOLD`). The
+result is a verdict (`passed` / `needs_review`) and a list of issues in
+`document_validations`, at `GET /v1/documents/{id}/validation`. `needs_review`
+is what the Phase 3 review queue will pick up.
+
 The document ends at `status = processed`. Classification and extraction are
 best-effort: if an LLM call fails the document is still `processed` (OCR already
-succeeded) — just without a `doc_type` or an extraction row.
+succeeded) — just without a `doc_type`, extraction, or validation row.
 
 ## Configuration
 

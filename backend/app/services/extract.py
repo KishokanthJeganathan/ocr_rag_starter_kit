@@ -46,6 +46,7 @@ class NdaExtraction(BaseModel):
     disclosing_party: Extracted[Party]
     receiving_party: Extracted[Party]
     effective_date: Extracted[str]  # ISO date, YYYY-MM-DD
+    expiry_date: Extracted[str]  # ISO date the term clause says the NDA expires
     term_years: Extracted[int]
     survival_years: Extracted[int]
     governing_law: Extracted[str]
@@ -59,8 +60,9 @@ _SYSTEM_PROMPT = (
     "supports. For every field give: value (or null if the document does not "
     "state it), confidence 0..1, and evidence (the shortest verbatim quote you "
     "took it from, or null if you inferred it). Dates must be ISO YYYY-MM-DD. "
-    "agreement_type is 'one_way' or 'mutual'. entity_type is 'corporation', "
-    "'llc', or 'limited_partnership'."
+    "expiry_date is the termination/expiry date the term clause actually states, "
+    "copied as written even if it looks wrong. agreement_type is 'one_way' or "
+    "'mutual'. entity_type is 'corporation', 'llc', or 'limited_partnership'."
 )
 
 

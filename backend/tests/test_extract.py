@@ -54,6 +54,7 @@ def _sample() -> NdaExtraction:
             evidence="Kennedy-Garcia LLC",
         ),
         effective_date=Extracted(value="2026-02-19", confidence=0.86, evidence="February 19, 2026"),
+        expiry_date=Extracted(value="2029-02-19", confidence=0.8, evidence="February 19, 2029"),
         term_years=Extracted(value=3, confidence=0.9, evidence="three (3) years"),
         survival_years=Extracted(value=5, confidence=0.8, evidence="five (5) years"),
         governing_law=Extracted(value="Massachusetts", confidence=0.97, evidence="Massachusetts"),

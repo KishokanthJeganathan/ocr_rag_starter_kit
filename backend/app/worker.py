@@ -2,8 +2,9 @@
 
 ``process_document`` runs the post-upload pipeline: rasterize the original,
 Textract each page, store the normalized layout + page images, classify the
-document type, then (for an NDA) extract its fields. Classification and
-extraction are best-effort — OCR has already succeeded by then.
+document type, then (for an NDA) extract its fields and validate them.
+Classification and extraction are best-effort — OCR has already succeeded by
+then; validation is pure code over whatever extraction produced.
 """
 
 from __future__ import annotations
@@ -24,8 +25,9 @@ from app.models import (
     DocumentLayout,
     DocumentStatus,
     DocumentType,
+    DocumentValidation,
 )
-from app.services import classify, extract, ocr, storage
+from app.services import classify, extract, ocr, storage, validate
 
 configure_logging(settings.log_level)
 log = get_logger("app.worker")
@@ -87,6 +89,7 @@ async def process_document(_: dict[str, Any], document_id: str, tenant_id: str) 
 
         classification = await _classify(layout)
         extraction = await _extract(layout, classification)
+        validation = validate.validate_nda(extraction) if extraction is not None else None
 
         async with session_scope(tid) as session:
             document = await session.get(Document, did)
@@ -116,12 +119,23 @@ async def process_document(_: dict[str, Any], document_id: str, tenant_id: str) 
                         fields=extraction.model_dump(mode="json"),
                     )
                 )
+            if validation is not None:
+                dumped = validation.model_dump(mode="json")
+                session.add(
+                    DocumentValidation(
+                        tenant_id=tid,
+                        document_id=did,
+                        verdict=dumped["verdict"],
+                        issues=dumped["issues"],
+                    )
+                )
         log.info(
             "worker.processed",
             document_id=document_id,
             pages=len(layout.pages),
             doc_type=classification.doc_type if classification else None,
             extracted=extraction is not None,
+            verdict=validation.verdict if validation else None,
         )
 
     except Exception as exc:

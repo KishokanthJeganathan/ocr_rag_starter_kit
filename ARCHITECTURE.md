@@ -1,8 +1,8 @@
 # Architecture
 
 What's in the tree today, and how a request flows through it. Scope: **upload a
-document → OCR it → classify it → (if NDA) extract its fields → read it all
-back.** Validation and everything after is not here yet.
+document → OCR it → classify it → (if NDA) extract its fields → validate them →
+read it all back.** RAG and the review UI are not here yet.
 
 ## Moving parts
 
@@ -49,8 +49,11 @@ back.** Validation and everything after is not here yet.
   │                              doc_type + confidence (best-effort)│
   │ extract.extract_nda          if NDA: full text -> OpenAI ->  │
   │                              fields{value,confidence,evidence}│
+  │ validate.validate_nda        rules + confidence gate ->      │
+  │                              verdict + issues (pure code)    │
   │ INSERT document_layouts      (normalized JSON)              │
   │ INSERT document_extractions  (if NDA)                       │
+  │ INSERT document_validations  (if NDA)                       │
   │ UPDATE documents             doc_type, confidence,          │
   │                              status -> processed            │
   │  … on an OCR error: status -> failed, error = "…"          │
@@ -58,6 +61,7 @@ back.** Validation and everything after is not here yet.
 
   GET /v1/documents/{id}/layout      -> the normalized layout JSON
   GET /v1/documents/{id}/extraction  -> the extracted fields (NDA only)
+  GET /v1/documents/{id}/validation  -> verdict + issues (NDA only)
   GET /v1/documents/{id}             -> the document row (status, doc_type, ...)
   GET /v1/documents                  -> this tenant's documents
 ```
@@ -68,7 +72,7 @@ back.** Validation and everything after is not here yet.
 | File | Role |
 |---|---|
 | `app/main.py` | builds the FastAPI app, wires the router, opens/closes the Redis pool |
-| `app/api/documents.py` | the endpoints above (upload, list, get, layout, extraction) |
+| `app/api/documents.py` | the endpoints above (upload, list, get, layout, extraction, validation) |
 | `app/deps.py` | `X-Tenant-Id` header → tenant-scoped DB session (stopgap until real auth) |
 | `app/schemas.py` | Pydantic request/response shapes (`DocumentOut`, `UploadResult`) |
 | `app/config.py` | settings from env / repo-root `.env` |
@@ -82,11 +86,12 @@ back.** Validation and everything after is not here yet.
 | `ocr.py` | `rasterize` (pages → PNG) + `analyze_pages` (Textract → normalized `OcrLayout`) |
 | `classify.py` | page-1 text → OpenAI → `Classification` (`doc_type`, `confidence`, `rationale`) |
 | `extract.py` | NDA text → OpenAI → `NdaExtraction` (each field `{value, confidence, evidence}`) |
+| `validate.py` | rules + confidence gate over `NdaExtraction` → `Validation` (`verdict`, `issues`). Pure. |
 
 **Worker**
 | File | Role |
 |---|---|
-| `app/worker.py` | `process_document` job = OCR + classify + (NDA) extract; `WorkerSettings` registers it |
+| `app/worker.py` | `process_document` job = OCR + classify + (NDA) extract + validate; `WorkerSettings` registers it |
 | `app/queue.py` | the Redis connection the api uses to enqueue jobs |
 
 **Data**
@@ -97,9 +102,10 @@ back.** Validation and everything after is not here yet.
 | `app/models/document.py` | one uploaded file + its ingest/OCR status |
 | `app/models/layout.py` | `document_layouts` — the OCR result, one row per document |
 | `app/models/extraction.py` | `document_extractions` — the extracted fields, one row per NDA |
+| `app/models/validation.py` | `document_validations` — the verdict + issues, one row per NDA |
 | `app/models/enums.py` | `SourceFormat`, `DocumentStatus`, `DocumentType` |
 | `app/models/base.py` | declarative base + `created_at`/`updated_at` mixin |
-| `alembic/versions/0001…0005` | migrations: tenants/matters, documents, layouts, classification, extractions |
+| `alembic/versions/0001…0006` | migrations: tenants/matters, documents, layouts, classification, extractions, validations |
 
 **Support**
 | File | Role |
@@ -107,13 +113,14 @@ back.** Validation and everything after is not here yet.
 | `app/logging.py` | structlog JSON logging |
 | `scripts/seed.py` | create the demo tenant + matter (`make seed`) |
 | `scripts/try-ocr.sh` | upload a fixture, wait, print the layout (`make try-ocr`) |
-| `tests/` | `test_rls`, `test_detect`, `test_ocr`, `test_classify`, `test_extract`, `test_documents_api`, `test_health` |
+| `tests/` | `test_rls`, `test_detect`, `test_ocr`, `test_classify`, `test_extract`, `test_validate`, `test_documents_api`, `test_health` |
 
 ## Data model
 
 ```
 tenants ──1:n── matters ──1:n── documents ──1:1── document_layouts
-                                          └──1:1── document_extractions  (NDA only)
+                                          ├──1:1── document_extractions  (NDA only)
+                                          └──1:1── document_validations  (NDA only)
 ```
 
 - **tenants / matters** — every other table carries `tenant_id`; RLS filters on it.
@@ -125,10 +132,11 @@ tenants ──1:n── matters ──1:n── documents ──1:1── docume
   `{ pages: [ { number, width, height, image_key, blocks: [ { text, bbox, confidence, role } ] } ] }`.
 - **document_extractions** — one row per NDA: `schema_version` (`nda.v1`), `model`,
   `fields` JSONB: `{ <field>: { value, confidence, evidence }, ... }`.
+- **document_validations** — one row per NDA: `verdict` (`passed` / `needs_review`),
+  `issues` JSONB: `[ { rule, severity, field, message }, ... ]`.
 
 ## Deliberately not here yet
 
-- **Validation rules + confidence gating** — the rest of Phase 1.
 - **Chunking, embeddings, vector search, RAG** — Phase 2.
 - **Review UI, corrections, approval snapshots, audit log, export** — Phase 3.
 - **Real auth** — currently a trusted `X-Tenant-Id` header.

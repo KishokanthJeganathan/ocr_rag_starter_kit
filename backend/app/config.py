@@ -43,6 +43,9 @@ class Settings(BaseSettings):
     classifier_model: str = "gpt-4o-mini"
     extractor_model: str = "gpt-4o-mini"
 
+    # Extracted fields below this confidence are flagged for human review.
+    confidence_threshold: float = 0.7
+
     max_upload_bytes: int = 25 * 1024 * 1024
 
     @property

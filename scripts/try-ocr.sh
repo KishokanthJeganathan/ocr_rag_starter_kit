@@ -52,5 +52,9 @@ echo "=== extraction ==="
 curl -sS -H "X-Tenant-Id: ${TENANT}" "${API}/v1/documents/${DOC}/extraction" | $PP || true
 
 echo
+echo "=== validation ==="
+curl -sS -H "X-Tenant-Id: ${TENANT}" "${API}/v1/documents/${DOC}/validation" | $PP || true
+
+echo
 echo "=== worker log (last 15) ==="
 docker compose logs worker --tail 15

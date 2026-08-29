@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.deps import get_tenant_id, tenant_session
-from app.models import Document, DocumentExtraction, DocumentLayout
+from app.models import Document, DocumentExtraction, DocumentLayout, DocumentValidation
 from app.queue import enqueue_process_document
 from app.schemas import DocumentOut, UploadResult
 from app.services.ingest import IngestError, ingest_document
@@ -106,4 +106,21 @@ async def get_document_extraction(
         "schema": row.schema_version,
         "model": row.model,
         "fields": row.fields,
+    }
+
+
+@router.get("/{document_id}/validation")
+async def get_document_validation(
+    document_id: uuid.UUID,
+    session: Annotated[AsyncSession, Depends(tenant_session)],
+) -> dict[str, object]:
+    row = await session.scalar(
+        select(DocumentValidation).where(DocumentValidation.document_id == document_id)
+    )
+    if row is None:
+        raise HTTPException(404, "no validation — not an NDA, or not processed yet")
+    return {
+        "document_id": str(document_id),
+        "verdict": row.verdict,
+        "issues": row.issues,
     }
