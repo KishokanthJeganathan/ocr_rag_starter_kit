@@ -29,14 +29,12 @@ echo "$RESP" | $PP
 DOC=$(echo "$RESP" | python3 -c "import sys,json; print(json.load(sys.stdin)['document']['id'])")
 echo "-> document id: $DOC"
 
-echo "-> waiting for the worker (OCR)..."
+echo "-> waiting for the worker (OCR -> classify -> extract)..."
 for _ in $(seq 1 40); do
-  CODE=$(curl -sS -o /dev/null -w '%{http_code}' -H "X-Tenant-Id: ${TENANT}" \
-    "${API}/v1/documents/${DOC}/layout")
   STATUS=$(curl -sS -H "X-Tenant-Id: ${TENANT}" "${API}/v1/documents/${DOC}" \
     | python3 -c "import sys,json; print(json.load(sys.stdin)['status'])")
-  echo "   layout=$CODE  status=$STATUS"
-  [ "$CODE" = "200" ] && break
+  echo "   status=$STATUS"
+  [ "$STATUS" = "processed" ] && break
   [ "$STATUS" = "failed" ] && break
   sleep 2
 done
@@ -48,6 +46,10 @@ curl -sS -H "X-Tenant-Id: ${TENANT}" "${API}/v1/documents/${DOC}" | $PP
 echo
 echo "=== layout ==="
 curl -sS -H "X-Tenant-Id: ${TENANT}" "${API}/v1/documents/${DOC}/layout" | $PP || true
+
+echo
+echo "=== extraction ==="
+curl -sS -H "X-Tenant-Id: ${TENANT}" "${API}/v1/documents/${DOC}/extraction" | $PP || true
 
 echo
 echo "=== worker log (last 15) ==="

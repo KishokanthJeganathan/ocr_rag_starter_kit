@@ -19,8 +19,36 @@ from app.config import settings
 from app.db import session_scope
 from app.models import Document, DocumentStatus, DocumentType, Matter, Tenant
 from app.services.classify import Classification
+from app.services.extract import Extracted, NdaExtraction, Party, Signatory
 from app.worker import process_document
 from tests._textract import FakeTextractClient
+
+
+def _nda_extraction() -> NdaExtraction:
+    return NdaExtraction(
+        agreement_type=Extracted(value="mutual", confidence=0.9, evidence=None),
+        disclosing_party=Extracted(
+            value=Party(name="A LLC", entity_type="llc", incorporation_state="Delaware"),
+            confidence=0.9,
+            evidence=None,
+        ),
+        receiving_party=Extracted(
+            value=Party(name="B LLC", entity_type="llc", incorporation_state="Florida"),
+            confidence=0.9,
+            evidence=None,
+        ),
+        effective_date=Extracted(value="2026-02-19", confidence=0.9, evidence=None),
+        term_years=Extracted(value=3, confidence=0.9, evidence=None),
+        survival_years=Extracted(value=5, confidence=0.9, evidence=None),
+        governing_law=Extracted(value="Massachusetts", confidence=0.9, evidence=None),
+        has_non_compete=Extracted(value=False, confidence=0.9, evidence=None),
+        non_compete_months=Extracted(value=None, confidence=0.9, evidence=None),
+        signatories=Extracted(
+            value=[Signatory(party="A LLC", name="Lisa", title="CEO")],
+            confidence=0.9,
+            evidence=None,
+        ),
+    )
 
 
 @pytest.fixture
@@ -181,6 +209,7 @@ async def test_worker_runs_ocr_classifies_and_stores_layout(
             doc_type=DocumentType.NDA, confidence=0.96, rationale="title says so"
         ),
     )
+    monkeypatch.setattr("app.services.extract.extract_nda", lambda _layout: _nda_extraction())
     tenant_id, matter_id = demo
     created = await _upload(client, tenant_id, matter_id, _pdf())
     doc_id = created.json()["document"]["id"]
@@ -202,6 +231,15 @@ async def test_worker_runs_ocr_classifies_and_stores_layout(
     assert doc.json()["page_count"] == 1
     assert doc.json()["doc_type"] == "nda"
     assert doc.json()["doc_type_confidence"] == 0.96
+
+    extraction = await client.get(
+        f"/v1/documents/{doc_id}/extraction", headers={"X-Tenant-Id": str(tenant_id)}
+    )
+    assert extraction.status_code == 200
+    fields = extraction.json()["fields"]
+    assert extraction.json()["schema"] == "nda.v1"
+    assert fields["governing_law"]["value"] == "Massachusetts"
+    assert fields["term_years"]["confidence"] == 0.9
 
 
 async def test_worker_still_processes_when_classifier_fails(
@@ -225,6 +263,12 @@ async def test_worker_still_processes_when_classifier_fails(
     doc = await client.get(f"/v1/documents/{doc_id}", headers={"X-Tenant-Id": str(tenant_id)})
     assert doc.json()["status"] == "processed"  # OCR succeeded, so the doc is not failed
     assert doc.json()["doc_type"] is None
+
+    # No classification -> no extraction attempted.
+    extraction = await client.get(
+        f"/v1/documents/{doc_id}/extraction", headers={"X-Tenant-Id": str(tenant_id)}
+    )
+    assert extraction.status_code == 404
 
 
 async def test_worker_marks_document_failed_on_ocr_error(

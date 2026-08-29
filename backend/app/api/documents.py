@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.deps import get_tenant_id, tenant_session
-from app.models import Document, DocumentLayout
+from app.models import Document, DocumentExtraction, DocumentLayout
 from app.queue import enqueue_process_document
 from app.schemas import DocumentOut, UploadResult
 from app.services.ingest import IngestError, ingest_document
@@ -88,4 +88,22 @@ async def get_document_layout(
         "engine": row.engine,
         "page_count": row.page_count,
         "pages": row.layout["pages"],
+    }
+
+
+@router.get("/{document_id}/extraction")
+async def get_document_extraction(
+    document_id: uuid.UUID,
+    session: Annotated[AsyncSession, Depends(tenant_session)],
+) -> dict[str, object]:
+    row = await session.scalar(
+        select(DocumentExtraction).where(DocumentExtraction.document_id == document_id)
+    )
+    if row is None:
+        raise HTTPException(404, "no extraction — not an NDA, or not processed yet")
+    return {
+        "document_id": str(document_id),
+        "schema": row.schema_version,
+        "model": row.model,
+        "fields": row.fields,
     }

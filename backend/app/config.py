@@ -38,9 +38,10 @@ class Settings(BaseSettings):
     aws_access_key_id: str = "minioadmin"
     aws_secret_access_key: str = "minioadmin"
 
-    # LLM used for classification (and, later, structured extraction).
+    # LLM used for classification and structured extraction.
     openai_api_key: str = ""
     classifier_model: str = "gpt-4o-mini"
+    extractor_model: str = "gpt-4o-mini"
 
     max_upload_bytes: int = 25 * 1024 * 1024
 

@@ -1,8 +1,9 @@
 """ARQ worker.
 
 ``process_document`` runs the post-upload pipeline: rasterize the original,
-Textract each page, store the normalized layout + page images, then classify
-the document type. Classification is best-effort — OCR has already succeeded.
+Textract each page, store the normalized layout + page images, classify the
+document type, then (for an NDA) extract its fields. Classification and
+extraction are best-effort — OCR has already succeeded by then.
 """
 
 from __future__ import annotations
@@ -17,8 +18,14 @@ from fastapi.concurrency import run_in_threadpool
 from app.config import settings
 from app.db import session_scope
 from app.logging import configure_logging, get_logger
-from app.models import Document, DocumentLayout, DocumentStatus
-from app.services import classify, ocr, storage
+from app.models import (
+    Document,
+    DocumentExtraction,
+    DocumentLayout,
+    DocumentStatus,
+    DocumentType,
+)
+from app.services import classify, extract, ocr, storage
 
 configure_logging(settings.log_level)
 log = get_logger("app.worker")
@@ -36,6 +43,21 @@ async def _classify(layout: ocr.OcrLayout) -> classify.Classification | None:
         log.warning("worker.classify_failed", error=f"{type(exc).__name__}: {exc}")
         return None
     log.info("worker.classified", doc_type=result.doc_type, confidence=result.confidence)
+    return result
+
+
+async def _extract(
+    layout: ocr.OcrLayout, classification: classify.Classification | None
+) -> extract.NdaExtraction | None:
+    """Best-effort, and only for the types we have a schema for (NDA today)."""
+    if classification is None or classification.doc_type != DocumentType.NDA:
+        return None
+    try:
+        result = await run_in_threadpool(extract.extract_nda, layout)
+    except Exception as exc:
+        log.warning("worker.extract_failed", error=f"{type(exc).__name__}: {exc}")
+        return None
+    log.info("worker.extracted", schema="nda.v1")
     return result
 
 
@@ -64,6 +86,7 @@ async def process_document(_: dict[str, Any], document_id: str, tenant_id: str) 
             image_keys[number] = key
 
         classification = await _classify(layout)
+        extraction = await _extract(layout, classification)
 
         async with session_scope(tid) as session:
             document = await session.get(Document, did)
@@ -83,11 +106,22 @@ async def process_document(_: dict[str, Any], document_id: str, tenant_id: str) 
                     layout=layout.to_dict(image_keys),
                 )
             )
+            if extraction is not None:
+                session.add(
+                    DocumentExtraction(
+                        tenant_id=tid,
+                        document_id=did,
+                        schema_version="nda.v1",
+                        model=settings.extractor_model,
+                        fields=extraction.model_dump(mode="json"),
+                    )
+                )
         log.info(
             "worker.processed",
             document_id=document_id,
             pages=len(layout.pages),
             doc_type=classification.doc_type if classification else None,
+            extracted=extraction is not None,
         )
 
     except Exception as exc:

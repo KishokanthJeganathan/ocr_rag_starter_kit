@@ -14,7 +14,7 @@ approvals, and RAG are added when we reach them, not before. See
 | Ingest an upload (detect, hash, dedup, store) | ✅ |
 | OCR & layout (AWS Textract → positioned text blocks) | ✅ |
 | Classify the document type (OpenAI → `nda` / `invoice` / `other` + confidence) | ✅ |
-| LLM turns layout blocks into structured fields against a schema | ⬜ |
+| LLM extraction — NDA fields as `{value, confidence, evidence}` against a schema | ✅ |
 | Validation rules | ⬜ |
 
 ### Phase 2 — RAG
@@ -51,7 +51,7 @@ See [generator/README.md](generator/README.md) for all flags (`--kind`,
 
 ```bash
 make seed                              # demo tenant + matter
-make try-ocr F=fixtures/nda_02000.pdf  # upload, wait for the worker, print the layout
+make try-ocr F=fixtures/nda_02000.pdf  # upload, wait, print layout + extraction
 ```
 
 The upload is sniffed (PDF/PNG/JPG/DOCX), hashed (SHA-256), deduplicated per
@@ -61,11 +61,18 @@ send it to `analyze_document` with the LAYOUT feature, and store the normalized
 result (`pages → blocks → {text, bbox, confidence, role}`) in `document_layouts`,
 plus a PNG per page. Read it back at `GET /v1/documents/{id}/layout`.
 
-Finally it **classifies** the document — the first page's text goes to OpenAI,
+Then it **classifies** the document — the first page's text goes to OpenAI,
 which returns `doc_type` (`nda` / `invoice` / `other`) + a confidence, stored on
-the `documents` row. The document ends at `status = processed`. Classification is
-best-effort: if the LLM call fails the document is still `processed` with a null
-`doc_type` (OCR already succeeded).
+the `documents` row.
+
+If it's an NDA, it **extracts** the fields — the whole document text goes to
+OpenAI against a Pydantic schema, and each field comes back as
+`{value, confidence, evidence}` in `document_extractions`. Read it at
+`GET /v1/documents/{id}/extraction`.
+
+The document ends at `status = processed`. Classification and extraction are
+best-effort: if an LLM call fails the document is still `processed` (OCR already
+succeeded) — just without a `doc_type` or an extraction row.
 
 ## Configuration
 

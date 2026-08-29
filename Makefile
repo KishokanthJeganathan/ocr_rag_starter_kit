@@ -28,7 +28,7 @@ migrate:  ## Apply database migrations
 seed:  ## Create the demo tenant + matter
 	$(COMPOSE) run --rm api python -m scripts.seed
 
-try-ocr:  ## Upload a fixture and print its OCR layout (make try-ocr F=fixtures/nda_02000.pdf)
+try-ocr:  ## Upload a fixture, print its layout + extraction (make try-ocr F=fixtures/nda_02000.pdf)
 	bash scripts/try-ocr.sh $(F)
 
 revision:  ## Autogenerate a migration: make revision m="add x"
