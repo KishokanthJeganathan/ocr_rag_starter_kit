@@ -7,6 +7,10 @@ export const API_BASE =
 export const TENANT_ID =
   process.env.NEXT_PUBLIC_TENANT_ID ?? "00000000-0000-0000-0000-000000000001";
 
+// The matter created by `make seed`. Synthetic documents are filed under it.
+export const MATTER_ID =
+  process.env.NEXT_PUBLIC_MATTER_ID ?? "00000000-0000-0000-0000-000000000002";
+
 const headers = { "X-Tenant-Id": TENANT_ID };
 
 export type DocumentOut = {

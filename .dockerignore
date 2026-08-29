@@ -1,0 +1,19 @@
+# The api/worker image builds from the repo root (it needs backend/ + generator/).
+**/.venv/
+**/__pycache__/
+**/*.py[cod]
+**/.pytest_cache/
+**/.mypy_cache/
+**/.ruff_cache/
+**/.coverage
+**/node_modules/
+**/.next/
+.git/
+web/
+fixtures/
+infra/
+backend/tests/
+generator/tests/
+**/.env
+**/.env.*
+**/*.md

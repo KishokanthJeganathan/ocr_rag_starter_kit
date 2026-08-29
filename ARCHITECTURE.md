@@ -15,14 +15,15 @@ here yet.
 | **Postgres** | metadata: tenants, matters, documents, OCR layouts | `backend/app/models/`, `backend/alembic/` |
 | **Redis** | the job queue between api and worker | `backend/app/queue.py` |
 | **MinIO / S3** | the original file bytes + rasterized page PNGs | `backend/app/services/storage.py` |
-| **generator** | standalone tool that makes synthetic NDA PDFs to test with | `generator/` (its own package) |
+| **generator** | makes synthetic NDA PDFs — used by the CLI *and* imported by the api (`POST /v1/documents/synthetic`) | `generator/` (its own package, editable path dep) |
 
 ## The journey of one upload
 
 ```
-  POST /v1/documents  (file + matter_id, header X-Tenant-Id)
+  POST /v1/documents            (file + matter_id, header X-Tenant-Id)
+  POST /v1/documents/synthetic  (NDA params → generator builds the PDF, then same path)
         │
-        ▼  api/documents.py : upload_document()
+        ▼  api/documents.py : upload_document() / create_synthetic_document()
   ┌─────────────────────────────────────────────────────────────┐
   │ deps.py        X-Tenant-Id -> UUID -> a DB session with      │
   │                app.current_tenant set (RLS scopes every row) │
@@ -84,6 +85,7 @@ here yet.
 | File | Role |
 |---|---|
 | `ingest.py` | the upload flow: detect → hash → dedup → check matter → store → insert row |
+| `synthesize.py` | maps a `SyntheticNdaRequest` → `generator.params.build_nda` → PDF bytes |
 | `detect.py` | file type (python-magic) + scanned-vs-digital + page count (PyMuPDF) |
 | `storage.py` | thin boto3 wrapper — `upload_bytes` / `download_bytes` (MinIO or S3) |
 | `ocr.py` | `rasterize` (pages → PNG) + `analyze_pages` (Textract → normalized `OcrLayout`) |
@@ -121,9 +123,11 @@ here yet.
 **Review UI** (`web/`, Next.js App Router, all Server Components — no client data layer)
 | File | Role |
 |---|---|
-| `app/lib/api.ts` | typed `fetch` wrappers + response types, tenant header |
-| `app/page.tsx` | document list with verdict badges |
+| `app/lib/api.ts` | typed `fetch` wrappers + response types, tenant/matter ids |
+| `app/page.tsx` | document list with verdict badges + "New NDA" link |
+| `app/new/page.tsx` + `actions.ts` | the generate form + its server action (`POST /synthetic` → redirect) |
 | `app/documents/[id]/page.tsx` | detail: page images ∥ fields (value·confidence·evidence) + issues |
+| `app/documents/[id]/auto-refresh.tsx` | client component — polls `router.refresh()` while a doc is in flight |
 | `app/documents/[id]/pages/[page]/route.ts` | proxies the page PNG, adds the tenant header |
 | `app/globals.css` | the whole stylesheet (no framework) |
 

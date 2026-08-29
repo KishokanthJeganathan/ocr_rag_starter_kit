@@ -133,6 +133,43 @@ async def test_upload_pdf_creates_document_and_enqueues(
     assert any(body["content_sha256"] in obj["Key"] for obj in stored["Contents"])
 
 
+async def test_synthetic_document_is_generated_and_queued(
+    client: AsyncClient,
+    s3: None,
+    demo: tuple[uuid.UUID, uuid.UUID],
+    captured_jobs: list[tuple[str, str]],
+) -> None:
+    tenant_id, matter_id = demo
+    resp = await client.post(
+        "/v1/documents/synthetic",
+        headers={"X-Tenant-Id": str(tenant_id)},
+        json={
+            "matter_id": str(matter_id),
+            "disclosing_party": "Acme Widgets LLC",
+            "agreement_type": "mutual",
+            "violations": ["missing_governing_law"],
+        },
+    )
+
+    assert resp.status_code == 201
+    body = resp.json()["document"]
+    assert body["source_format"] == "pdf"
+    assert body["status"] == "queued"
+    assert captured_jobs == [(body["id"], str(tenant_id))]
+
+
+async def test_synthetic_document_rejects_unknown_violation(
+    client: AsyncClient, s3: None, demo: tuple[uuid.UUID, uuid.UUID]
+) -> None:
+    tenant_id, matter_id = demo
+    resp = await client.post(
+        "/v1/documents/synthetic",
+        headers={"X-Tenant-Id": str(tenant_id)},
+        json={"matter_id": str(matter_id), "violations": ["nope"]},
+    )
+    assert resp.status_code == 422
+
+
 async def test_identical_bytes_are_deduped(
     client: AsyncClient,
     s3: None,

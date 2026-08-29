@@ -19,7 +19,12 @@ dependencies = [
     "boto3>=1.35",
     "pymupdf>=1.24",
     "openai>=3.6,<4",
+    # The synthetic-document generator, reused by POST /v1/documents/synthetic.
+    "ocr-rag-generator",
 ]
+
+[tool.uv.sources]
+ocr-rag-generator = { path = "../generator", editable = true }
 
 [dependency-groups]
 dev = [
@@ -60,6 +65,12 @@ plugins = ["pydantic.mypy"]
 # as fully untyped.
 [[tool.mypy.overrides]]
 module = ["pymupdf", "pymupdf.*", "fitz", "magic"]
+follow_imports = "skip"
+follow_untyped_imports = true
+
+# The generator is its own strict-checked package; don't re-check it here.
+[[tool.mypy.overrides]]
+module = ["generator", "generator.*"]
 follow_imports = "skip"
 follow_untyped_imports = true
 

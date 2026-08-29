@@ -60,7 +60,9 @@ services:
       "
 
   api:
-    build: ./backend
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
     environment:
       ENVIRONMENT: local
@@ -89,7 +91,9 @@ services:
         condition: service_healthy
 
   worker:
-    build: ./backend
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
     command: arq app.worker.WorkerSettings
     environment:
       ENVIRONMENT: local

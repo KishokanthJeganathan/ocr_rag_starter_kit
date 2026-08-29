@@ -6,6 +6,7 @@ import {
   pageImageUrl,
   type Cell,
 } from "@/app/lib/api";
+import { AutoRefresh } from "./auto-refresh";
 
 export const dynamic = "force-dynamic";
 
@@ -45,15 +46,19 @@ export default async function DocumentDetailPage({
 
   const flagged = new Set((validation?.issues ?? []).map((i) => i.field));
   const pageCount = document.page_count ?? 0;
+  const inFlight = document.status === "queued" || document.status === "processing";
 
   return (
     <>
+      {inFlight && <AutoRefresh />}
       <div className="detail-head">
         <h1>{document.original_filename}</h1>
-        {validation && (
+        {validation ? (
           <span className={`badge ${validation.verdict}`}>
             {validation.verdict === "passed" ? "passed" : "needs review"}
           </span>
+        ) : (
+          inFlight && <span className="badge muted">processing…</span>
         )}
       </div>
       <p className="detail-meta">

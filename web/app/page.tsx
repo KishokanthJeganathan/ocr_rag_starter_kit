@@ -14,10 +14,16 @@ export default async function DocumentListPage() {
 
   return (
     <>
-      <h1>Documents</h1>
+      <div className="detail-head">
+        <h1>Documents</h1>
+        <Link href="/new" className="button">
+          New NDA
+        </Link>
+      </div>
       {documents.length === 0 ? (
         <p className="empty">
-          Nothing uploaded yet. Run <code>make try-ocr F=…</code>.
+          Nothing here yet. Create one with <strong>New NDA</strong>, or run{" "}
+          <code>make try-ocr F=…</code>.
         </p>
       ) : (
         <table className="doc-table">

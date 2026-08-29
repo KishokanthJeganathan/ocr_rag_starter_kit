@@ -14,8 +14,8 @@ from app.config import settings
 from app.deps import get_tenant_id, tenant_session
 from app.models import Document, DocumentExtraction, DocumentLayout, DocumentValidation
 from app.queue import enqueue_process_document
-from app.schemas import DocumentOut, UploadResult
-from app.services import storage
+from app.schemas import DocumentOut, SyntheticNdaRequest, UploadResult
+from app.services import storage, synthesize
 from app.services.ingest import IngestError, ingest_document
 
 router = APIRouter(prefix="/v1/documents", tags=["documents"])
@@ -41,6 +41,39 @@ async def upload_document(
             matter_id=matter_id,
             filename=file.filename or "upload",
             data=data,
+        )
+    except IngestError as exc:
+        raise HTTPException(exc.status_code, exc.detail) from None
+
+    await session.commit()
+
+    if not ingested.duplicate:
+        await enqueue_process_document(ingested.document.id, tenant_id)
+
+    return UploadResult(
+        document=DocumentOut.model_validate(ingested.document),
+        duplicate=ingested.duplicate,
+    )
+
+
+@router.post("/synthetic", response_model=UploadResult, status_code=201)
+async def create_synthetic_document(
+    tenant_id: Annotated[uuid.UUID, Depends(get_tenant_id)],
+    session: Annotated[AsyncSession, Depends(tenant_session)],
+    body: SyntheticNdaRequest,
+) -> UploadResult:
+    try:
+        pdf = await run_in_threadpool(synthesize.build_synthetic_nda, body)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from None
+
+    try:
+        ingested = await ingest_document(
+            session,
+            tenant_id=tenant_id,
+            matter_id=body.matter_id,
+            filename="synthetic-nda.pdf",
+            data=pdf,
         )
     except IngestError as exc:
         raise HTTPException(exc.status_code, exc.detail) from None

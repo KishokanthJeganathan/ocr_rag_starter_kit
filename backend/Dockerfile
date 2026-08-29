@@ -16,11 +16,15 @@ COPY --from=ghcr.io/astral-sh/uv:0.12.5 /uv /bin/uv
 
 WORKDIR /app
 
+# Build context is the repo root. The backend has an editable path dependency
+# on ../generator, so that source must be present before `uv sync`.
+COPY generator /generator
+
 # Install dependencies first for layer caching.
-COPY pyproject.toml uv.lock ./
+COPY backend/pyproject.toml backend/uv.lock ./
 RUN uv sync --frozen --no-install-project
 
-COPY . .
+COPY backend/ .
 RUN uv sync --frozen
 
 EXPOSE 8000

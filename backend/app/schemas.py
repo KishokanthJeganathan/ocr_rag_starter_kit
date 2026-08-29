@@ -8,8 +8,9 @@ from __future__ import annotations
 
 import datetime as dt
 import uuid
+from typing import Literal
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.models.enums import DocumentStatus, DocumentType, SourceFormat
 
@@ -36,3 +37,19 @@ class DocumentOut(BaseModel):
 class UploadResult(BaseModel):
     document: DocumentOut
     duplicate: bool
+
+
+class SyntheticNdaRequest(BaseModel):
+    """Parameters for POST /v1/documents/synthetic. Any field left unset is
+    filled from a random seed, so each generated PDF is still unique."""
+
+    matter_id: uuid.UUID
+    disclosing_party: str | None = None
+    receiving_party: str | None = None
+    effective_date: dt.date | None = None
+    term_years: int | None = None
+    agreement_type: Literal["one-way", "mutual"] | None = None
+    governing_law: str | None = None
+    # Deliberately break the document: "date_order", "missing_party_sig",
+    # "missing_governing_law".
+    violations: list[str] = Field(default_factory=list)

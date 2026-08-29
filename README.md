@@ -48,6 +48,10 @@ uv run python -m generator make --type nda --count 5 --out ../fixtures
 See [generator/README.md](generator/README.md) for all flags (`--kind`,
 `--violation`, `--scanned`, `--seed`). `fixtures/` is git-ignored.
 
+The backend also imports this package (as an editable path dependency) so the
+**New NDA** form can build parameterised documents through
+`POST /v1/documents/synthetic` — same code, no CLI.
+
 ## Upload a document and see the OCR result
 
 ```bash
@@ -84,10 +88,19 @@ succeeded) — just without a `doc_type`, extraction, or validation row.
 
 ## Review UI
 
-A **read-only** Next.js viewer for what the pipeline produced — a document list
-with verdict badges, and a per-document page showing the scan next to the
-extracted fields (value · confidence · evidence) with the failing fields
-highlighted. Editing, approval, and corrections are Phase 3.
+A Next.js UI for the pipeline:
+
+- **New NDA** — a form that generates a synthetic NDA from your parameters (party
+  names, dates, term, direction) with optional injected defects, POSTs it to
+  `POST /v1/documents/synthetic`, and drops you on the document page while it
+  processes (auto-refreshing until the verdict lands).
+- **Document list** — every document with its verdict badge.
+- **Document detail** — the page scans next to the extracted fields
+  (value · confidence · evidence), with the fields that failed validation
+  highlighted, and the issue list.
+
+It's **read-only** past that — field editing, approval, and corrections are
+Phase 3.
 
 ```bash
 make web-install     # first time only
