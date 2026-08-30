@@ -392,3 +392,79 @@ h2 {
   padding: 10px 14px;
   font-size: 14px;
 }
+
+.head-actions {
+  display: flex;
+  gap: 10px;
+}
+
+/* --- ask --- */
+.ask-panel {
+  margin-bottom: 24px;
+}
+
+.askbox {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 16px;
+}
+
+.ask-form {
+  display: flex;
+  gap: 10px;
+}
+
+.ask-form input {
+  flex: 1;
+  font: inherit;
+  padding: 9px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--ink);
+}
+
+.ask-form input:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.ask-form button:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.ask-answer {
+  margin-top: 14px;
+  border-top: 1px solid var(--line);
+  padding-top: 14px;
+}
+
+.ask-answer-text {
+  margin: 0 0 12px;
+  white-space: pre-wrap;
+}
+
+.ask-sources {
+  margin: 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ask-sources li {
+  font-size: 13px;
+}
+
+.ask-sources a {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.ask-snippet {
+  display: block;
+  color: var(--muted);
+  margin-top: 2px;
+}

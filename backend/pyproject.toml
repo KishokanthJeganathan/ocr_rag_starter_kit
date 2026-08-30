@@ -18,7 +18,11 @@ dependencies = [
     "python-magic>=0.4.27",
     "boto3>=1.35",
     "pymupdf>=1.24",
-    "openai>=3.6,<4",
+    # langchain-openai pins openai<3, so the whole app stays on the openai 2.x line.
+    "openai>=2,<3",
+    "pgvector>=0.3",
+    "langchain-text-splitters>=0.3,<1",
+    "langchain-openai>=0.3,<1",
     # The synthetic-document generator, reused by POST /v1/documents/synthetic.
     "ocr-rag-generator",
 ]

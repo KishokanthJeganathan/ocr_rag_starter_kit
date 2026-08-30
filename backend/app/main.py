@@ -11,6 +11,7 @@ from redis.asyncio import Redis
 from sqlalchemy import text
 
 from app import __version__
+from app.api.ask import router as ask_router
 from app.api.documents import router as documents_router
 from app.config import settings
 from app.db import engine
@@ -37,6 +38,7 @@ app = FastAPI(
 )
 
 app.include_router(documents_router)
+app.include_router(ask_router)
 
 
 @app.get("/health", tags=["health"])

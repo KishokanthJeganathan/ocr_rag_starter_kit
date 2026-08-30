@@ -16,9 +16,14 @@ export default async function DocumentListPage() {
     <>
       <div className="detail-head">
         <h1>Documents</h1>
-        <Link href="/new" className="button">
-          New NDA
-        </Link>
+        <span className="head-actions">
+          <Link href="/ask" className="button ghost">
+            Ask
+          </Link>
+          <Link href="/new" className="button">
+            New NDA
+          </Link>
+        </span>
       </div>
       {documents.length === 0 ? (
         <p className="empty">

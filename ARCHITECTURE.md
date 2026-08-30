@@ -2,8 +2,8 @@
 
 What's in the tree today, and how a request flows through it. Scope: **upload a
 document → OCR it → classify it → (if NDA) extract its fields → validate them →
-view it all in a read-only UI.** RAG and an editable review workflow are not
-here yet.
+chunk + embed for retrieval → view it all, and ask questions across the corpus,
+in a read-only UI.** An editable review workflow is not here yet.
 
 ## Moving parts
 
@@ -54,7 +54,11 @@ here yet.
   │                              fields{value,confidence,evidence}│
   │ validate.validate_nda        rules + confidence gate ->      │
   │                              verdict + issues (pure code)    │
+  │ chunk.chunk_layout           text -> LangChain splitter ->   │
+  │                              overlapping ~500-token windows  │
+  │ embed.embed_texts            each window -> vector (LangChain)│
   │ INSERT document_layouts      (normalized JSON)              │
+  │ INSERT document_chunks       (text + embedding, per window) │
   │ INSERT document_extractions  (if NDA)                       │
   │ INSERT document_validations  (if NDA)                       │
   │ UPDATE documents             doc_type, confidence,          │
@@ -62,12 +66,14 @@ here yet.
   │  … on an OCR error: status -> failed, error = "…"          │
   └─────────────────────────────────────────────────────────────┘
 
-  GET /v1/documents/{id}/layout        -> the normalized layout JSON
-  GET /v1/documents/{id}/extraction    -> the extracted fields (NDA only)
-  GET /v1/documents/{id}/validation    -> verdict + issues (NDA only)
-  GET /v1/documents/{id}/pages/{n}.png -> the rasterized page image (from S3)
-  GET /v1/documents/{id}               -> the document row (status, doc_type, ...)
-  GET /v1/documents                    -> this tenant's documents
+  GET  /v1/documents/{id}/layout        -> the normalized layout JSON
+  GET  /v1/documents/{id}/extraction    -> the extracted fields (NDA only)
+  GET  /v1/documents/{id}/validation    -> verdict + issues (NDA only)
+  GET  /v1/documents/{id}/pages/{n}.png -> the rasterized page image (from S3)
+  GET  /v1/documents/{id}               -> the document row (status, doc_type, ...)
+  GET  /v1/documents                    -> this tenant's documents
+  POST /v1/ask   {question, document_id?}  -> embed q -> pgvector nearest chunks
+                                              -> LLM answer + [S1]-style sources
 ```
 
 ## Every file
@@ -75,8 +81,9 @@ here yet.
 **HTTP layer**
 | File | Role |
 |---|---|
-| `app/main.py` | builds the FastAPI app, wires the router, opens/closes the Redis pool |
-| `app/api/documents.py` | the endpoints above (upload, list, get, layout, extraction, validation) |
+| `app/main.py` | builds the FastAPI app, wires the routers, opens/closes the Redis pool |
+| `app/api/documents.py` | upload, synthetic, list, get, layout, extraction, validation, page image |
+| `app/api/ask.py` | `POST /v1/ask` — RAG Q&A over `document_chunks` |
 | `app/deps.py` | `X-Tenant-Id` header → tenant-scoped DB session (stopgap until real auth) |
 | `app/schemas.py` | Pydantic request/response shapes (`DocumentOut`, `UploadResult`) |
 | `app/config.py` | settings from env / repo-root `.env` |
@@ -92,11 +99,15 @@ here yet.
 | `classify.py` | page-1 text → OpenAI → `Classification` (`doc_type`, `confidence`, `rationale`) |
 | `extract.py` | NDA text → OpenAI → `NdaExtraction` (each field `{value, confidence, evidence}`) |
 | `validate.py` | rules + confidence gate over `NdaExtraction` → `Validation` (`verdict`, `issues`). Pure. |
+| `chunk.py` | layout dict → overlapping `Chunk`s via LangChain `RecursiveCharacterTextSplitter` (~256 tokens); skips header/footer/page-number blocks; page tracked by forward-only offset lookup. Pure. |
+| `embed.py` | text → vectors via LangChain `OpenAIEmbeddings` (`text-embedding-3-small`) |
+| `retrieve.py` | pgvector cosine-nearest `document_chunks` (RLS-scoped, optional one-doc filter, drops matches past `retrieval_max_distance`) |
+| `answer.py` | retrieved chunks + question → OpenAI → grounded answer + `Source[]` |
 
 **Worker**
 | File | Role |
 |---|---|
-| `app/worker.py` | `process_document` job = OCR + classify + (NDA) extract + validate; `WorkerSettings` registers it |
+| `app/worker.py` | `process_document` = OCR + classify + (NDA) extract + validate + chunk/embed; `WorkerSettings` registers it |
 | `app/queue.py` | the Redis connection the api uses to enqueue jobs |
 
 **Data**
@@ -108,9 +119,10 @@ here yet.
 | `app/models/layout.py` | `document_layouts` — the OCR result, one row per document |
 | `app/models/extraction.py` | `document_extractions` — the extracted fields, one row per NDA |
 | `app/models/validation.py` | `document_validations` — the verdict + issues, one row per NDA |
+| `app/models/chunk.py` | `document_chunks` — one retrievable passage + its `vector(1536)` embedding |
 | `app/models/enums.py` | `SourceFormat`, `DocumentStatus`, `DocumentType` |
 | `app/models/base.py` | declarative base + `created_at`/`updated_at` mixin |
-| `alembic/versions/0001…0006` | migrations: tenants/matters, documents, layouts, classification, extractions, validations |
+| `alembic/versions/0001…0007` | migrations: tenants/matters, documents, layouts, classification, extractions, validations, chunks |
 
 **Support**
 | File | Role |
@@ -118,7 +130,7 @@ here yet.
 | `app/logging.py` | structlog JSON logging |
 | `scripts/seed.py` | create the demo tenant + matter (`make seed`) |
 | `scripts/try-ocr.sh` | upload a fixture, wait, print the layout (`make try-ocr`) |
-| `tests/` | `test_rls`, `test_detect`, `test_ocr`, `test_classify`, `test_extract`, `test_validate`, `test_documents_api`, `test_health` |
+| `tests/` | `test_rls`, `test_detect`, `test_ocr`, `test_classify`, `test_extract`, `test_validate`, `test_chunk`, `test_documents_api`, `test_ask_api`, `test_synthesize`, `test_health` |
 
 **Review UI** (`web/`, Next.js App Router, all Server Components — no client data layer)
 | File | Role |
@@ -126,7 +138,8 @@ here yet.
 | `app/lib/api.ts` | typed `fetch` wrappers + response types, tenant/matter ids |
 | `app/page.tsx` | document list with verdict badges + "New NDA" link |
 | `app/new/page.tsx` + `actions.ts` | the generate form + its server action (`POST /synthetic` → redirect) |
-| `app/documents/[id]/page.tsx` | detail: page images ∥ fields (value·confidence·evidence) + issues |
+| `app/ask/page.tsx` + `ask-box.tsx` + `actions.ts` | corpus Q&A page; `AskBox` (client) is reused on the detail page |
+| `app/documents/[id]/page.tsx` | detail: Ask panel, then page images ∥ fields (value·confidence·evidence) + issues |
 | `app/documents/[id]/auto-refresh.tsx` | client component — polls `router.refresh()` while a doc is in flight |
 | `app/documents/[id]/pages/[page]/route.ts` | proxies the page PNG, adds the tenant header |
 | `app/globals.css` | the whole stylesheet (no framework) |
@@ -136,7 +149,8 @@ here yet.
 ```
 tenants ──1:n── matters ──1:n── documents ──1:1── document_layouts
                                           ├──1:1── document_extractions  (NDA only)
-                                          └──1:1── document_validations  (NDA only)
+                                          ├──1:1── document_validations  (NDA only)
+                                          └──1:n── document_chunks       (text + embedding)
 ```
 
 - **tenants / matters** — every other table carries `tenant_id`; RLS filters on it.
@@ -150,10 +164,14 @@ tenants ──1:n── matters ──1:n── documents ──1:1── docume
   `fields` JSONB: `{ <field>: { value, confidence, evidence }, ... }`.
 - **document_validations** — one row per NDA: `verdict` (`passed` / `needs_review`),
   `issues` JSONB: `[ { rule, severity, field, message }, ... ]`.
+- **document_chunks** — many per document: `chunk_index`, `page`, `text`,
+  `embedding vector(1536)` (HNSW cosine index). Written by the worker; re-chunked
+  (delete + insert) on every reprocess.
 
 ## Deliberately not here yet
 
-- **Chunking, embeddings, vector search, RAG** — Phase 2.
+- **Hybrid retrieval (full-text + RRF), a rerank pass, streamed answers** — RAG
+  follow-ups; today it's vector-only, non-streaming.
 - **Field editing, corrections history, approval snapshots, audit log, export** —
   Phase 3. The `web/` UI today is read-only.
 - **Real auth** — currently a trusted `X-Tenant-Id` header; the UI hard-codes the

@@ -59,10 +59,13 @@ _SYSTEM_PROMPT = (
     "You extract fields from a non-disclosure agreement. Use only what the text "
     "supports. For every field give: value (or null if the document does not "
     "state it), confidence 0..1, and evidence (the shortest verbatim quote you "
-    "took it from, or null if you inferred it). Dates must be ISO YYYY-MM-DD. "
-    "expiry_date is the termination/expiry date the term clause actually states, "
-    "copied as written even if it looks wrong. agreement_type is 'one_way' or "
-    "'mutual'. entity_type is 'corporation', 'llc', or 'limited_partnership'."
+    "took it from, or null if you inferred it). If you have read the whole "
+    "document and a clause is simply absent, that is a confident finding: give "
+    "the natural default (e.g. has_non_compete=false, non_compete_months=null) a "
+    "high confidence, not a low one. Dates must be ISO YYYY-MM-DD. expiry_date "
+    "is the termination/expiry date the term clause actually states, copied as "
+    "written even if it looks wrong. agreement_type is 'one_way' or 'mutual'. "
+    "entity_type is 'corporation', 'llc', or 'limited_partnership'."
 )
 
 

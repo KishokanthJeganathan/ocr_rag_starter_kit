@@ -83,21 +83,72 @@ def _governing_law_present(x: NdaExtraction) -> list[Issue]:
     ]
 
 
+_ENTITY_SUFFIXES = (
+    ", inc.",
+    " inc.",
+    " inc",
+    ", llc",
+    " llc",
+    ", l.p.",
+    " l.p.",
+    " lp",
+    " corporation",
+    " corp.",
+    ", ltd.",
+    " ltd.",
+    " ltd",
+    " company",
+    " co.",
+)
+
+
+def _norm_party(value: str | None) -> str:
+    if not value:
+        return ""
+    text = value.lower().strip()
+    for suffix in _ENTITY_SUFFIXES:
+        if text.endswith(suffix):
+            text = text[: -len(suffix)]
+            break
+    return text.strip(" ,.")
+
+
 def _signatory_per_party(x: NdaExtraction) -> list[Issue]:
-    signed = {s.party for s in (x.signatories.value or []) if s.party}
-    issues: list[Issue] = []
-    for field in ("disclosing_party", "receiving_party"):
-        party = getattr(x, field).value
-        name = party.name if party else None
-        if name and name not in signed:
-            issues.append(
-                Issue(
-                    rule="signatory_per_party",
-                    severity=Severity.ERROR,
-                    field=field,
-                    message=f"{name} has no signature block",
-                )
+    """Both parties must have a signature block. The LLM's ``signatories`` and
+    ``*_party`` strings rarely match byte-for-byte, so: two or more blocks →
+    fine; fewer than two → flag, naming the missing party when we can."""
+    blocks = [s for s in (x.signatories.value or []) if (s.party or s.name or s.title)]
+    parties = {
+        "disclosing_party": x.disclosing_party.value,
+        "receiving_party": x.receiving_party.value,
+    }
+    named = {field: (p.name if p else None) for field, p in parties.items()}
+
+    if len([n for n in named.values() if n]) < 2:
+        return []  # not enough party info to judge
+    if len(blocks) >= 2:
+        return []  # both parties signed
+
+    signed = {_norm_party(s.party) for s in blocks}
+    issues = [
+        Issue(
+            rule="signatory_per_party",
+            severity=Severity.ERROR,
+            field=field,
+            message=f"{name} has no signature block",
+        )
+        for field, name in named.items()
+        if name and _norm_party(name) not in signed
+    ]
+    if not issues:  # one block, but couldn't tie it to a party
+        issues.append(
+            Issue(
+                rule="signatory_per_party",
+                severity=Severity.ERROR,
+                field="receiving_party",
+                message="only one signature block found for two parties",
             )
+        )
     return issues
 
 

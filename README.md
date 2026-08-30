@@ -7,7 +7,7 @@ Built in three phases. **Only the current phase's code is in the tree** — revi
 approvals, and RAG are added when we reach them, not before. See
 [ARCHITECTURE.md](ARCHITECTURE.md) for how the current code fits together.
 
-### Phase 1 — Extraction (in progress)
+### Phase 1 — Extraction ✅
 
 | Step | Status |
 |---|---|
@@ -19,8 +19,13 @@ approvals, and RAG are added when we reach them, not before. See
 
 ### Phase 2 — RAG
 
-Chunk the layout → embed → hybrid search + rerank → streamed answers with page
-citations.
+| Step | Status |
+|---|---|
+| Chunk the layout (LangChain `RecursiveCharacterTextSplitter`, page-tracked) | ✅ |
+| Embed each chunk (LangChain `OpenAIEmbeddings`, `text-embedding-3-small`) → `document_chunks` (pgvector) | ✅ |
+| `POST /v1/ask` — question embedding → nearest chunks → answer with `[S1]` citations | ✅ |
+| Corpus-wide, or one document via an optional filter | ✅ |
+| Hybrid search + rerank, streamed answers | ⬜ later |
 
 ### Phase 3 — Review & approvals
 
@@ -82,6 +87,18 @@ result is a verdict (`passed` / `needs_review`) and a list of issues in
 `document_validations`, at `GET /v1/documents/{id}/validation`. `needs_review`
 is what the Phase 3 review queue will pick up.
 
+Finally it's **indexed for retrieval** — LangChain's
+`RecursiveCharacterTextSplitter` cuts the layout text into overlapping
+~256-token chunks (headers/footers dropped, each tagged with its page),
+LangChain's `OpenAIEmbeddings` embeds them, and they're written to
+`document_chunks` (a pgvector column). `POST /v1/ask` then embeds the question,
+pulls the nearest chunks with a plain SQL query (this tenant only via RLS;
+optionally one document; matches past `RETRIEVAL_MAX_DISTANCE` dropped so an
+off-topic question returns nothing), and has an LLM answer from just those,
+citing `[S1]`, `[S2]` → each source carries its document + page. (Retrieval
+stays raw SQL so pgvector search runs behind row-level security; LangChain's
+vector store would bring its own unscoped schema.)
+
 The document ends at `status = processed`. Classification and extraction are
 best-effort: if an LLM call fails the document is still `processed` (OCR already
 succeeded) — just without a `doc_type`, extraction, or validation row.
@@ -97,10 +114,11 @@ A Next.js UI for the pipeline:
 - **Document list** — every document with its verdict badge.
 - **Document detail** — the page scans next to the extracted fields
   (value · confidence · evidence), with the fields that failed validation
-  highlighted, and the issue list.
+  highlighted, the issue list, and an **Ask this document** box.
+- **Ask** (`/ask`) — a question box over the whole corpus; the answer cites the
+  documents and pages it came from.
 
-It's **read-only** past that — field editing, approval, and corrections are
-Phase 3.
+Field editing, approval, and corrections are Phase 3.
 
 ```bash
 make web-install     # first time only

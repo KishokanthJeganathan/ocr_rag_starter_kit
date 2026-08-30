@@ -2,9 +2,9 @@
 
 ``process_document`` runs the post-upload pipeline: rasterize the original,
 Textract each page, store the normalized layout + page images, classify the
-document type, then (for an NDA) extract its fields and validate them.
-Classification and extraction are best-effort — OCR has already succeeded by
-then; validation is pure code over whatever extraction produced.
+document type, then (for an NDA) extract its fields and validate them, and chunk
++ embed the text for retrieval. Everything after OCR is best-effort — OCR has
+already succeeded by then.
 """
 
 from __future__ import annotations
@@ -15,19 +15,21 @@ from typing import Any, ClassVar
 
 from arq.connections import RedisSettings
 from fastapi.concurrency import run_in_threadpool
+from sqlalchemy import delete
 
 from app.config import settings
 from app.db import session_scope
 from app.logging import configure_logging, get_logger
 from app.models import (
     Document,
+    DocumentChunk,
     DocumentExtraction,
     DocumentLayout,
     DocumentStatus,
     DocumentType,
     DocumentValidation,
 )
-from app.services import classify, extract, ocr, storage, validate
+from app.services import chunk, classify, embed, extract, ocr, storage, validate
 
 configure_logging(settings.log_level)
 log = get_logger("app.worker")
@@ -63,6 +65,21 @@ async def _extract(
     return result
 
 
+async def _index(layout_dict: dict[str, Any]) -> list[tuple[chunk.Chunk, list[float]]] | None:
+    """Chunk the layout and embed each piece. Best-effort — a failure just
+    leaves the document out of retrieval."""
+    chunks = chunk.chunk_layout(layout_dict)
+    if not chunks:
+        return None
+    try:
+        vectors = await run_in_threadpool(embed.embed_texts, [c.text for c in chunks])
+    except Exception as exc:
+        log.warning("worker.embed_failed", error=f"{type(exc).__name__}: {exc}")
+        return None
+    log.info("worker.indexed", chunks=len(chunks))
+    return list(zip(chunks, vectors, strict=True))
+
+
 async def process_document(_: dict[str, Any], document_id: str, tenant_id: str) -> None:
     tid = uuid.UUID(tenant_id)
     did = uuid.UUID(document_id)
@@ -87,9 +104,11 @@ async def process_document(_: dict[str, Any], document_id: str, tenant_id: str) 
             await run_in_threadpool(storage.upload_bytes, key, page.png, "image/png")
             image_keys[number] = key
 
+        layout_dict = layout.to_dict(image_keys)
         classification = await _classify(layout)
         extraction = await _extract(layout, classification)
         validation = validate.validate_nda(extraction) if extraction is not None else None
+        indexed = await _index(layout_dict)
 
         async with session_scope(tid) as session:
             document = await session.get(Document, did)
@@ -106,9 +125,22 @@ async def process_document(_: dict[str, Any], document_id: str, tenant_id: str) 
                     document_id=did,
                     engine=layout.engine,
                     page_count=len(layout.pages),
-                    layout=layout.to_dict(image_keys),
+                    layout=layout_dict,
                 )
             )
+            if indexed is not None:
+                await session.execute(delete(DocumentChunk).where(DocumentChunk.document_id == did))
+                for piece, vector in indexed:
+                    session.add(
+                        DocumentChunk(
+                            tenant_id=tid,
+                            document_id=did,
+                            chunk_index=piece.index,
+                            page=piece.page,
+                            text=piece.text,
+                            embedding=vector,
+                        )
+                    )
             if extraction is not None:
                 session.add(
                     DocumentExtraction(
@@ -136,6 +168,7 @@ async def process_document(_: dict[str, Any], document_id: str, tenant_id: str) 
             doc_type=classification.doc_type if classification else None,
             extracted=extraction is not None,
             verdict=validation.verdict if validation else None,
+            chunks=len(indexed) if indexed else 0,
         )
 
     except Exception as exc:

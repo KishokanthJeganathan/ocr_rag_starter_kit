@@ -39,6 +39,24 @@ class UploadResult(BaseModel):
     duplicate: bool
 
 
+class AskRequest(BaseModel):
+    question: str
+    document_id: uuid.UUID | None = None  # set = ask one document; unset = whole corpus
+
+
+class SourceOut(BaseModel):
+    n: int
+    document_id: str
+    filename: str
+    page: int
+    snippet: str
+
+
+class AskResponse(BaseModel):
+    answer: str
+    sources: list[SourceOut]
+
+
 class SyntheticNdaRequest(BaseModel):
     """Parameters for POST /v1/documents/synthetic. Any field left unset is
     filled from a random seed, so each generated PDF is still unique."""

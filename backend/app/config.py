@@ -46,6 +46,17 @@ class Settings(BaseSettings):
     # Extracted fields below this confidence are flagged for human review.
     confidence_threshold: float = 0.7
 
+    # RAG: chunking, embeddings, retrieval, answering.
+    embed_model: str = "text-embedding-3-small"
+    embed_dim: int = 1536
+    answer_model: str = "gpt-4o-mini"
+    retrieval_k: int = 8
+    # Chunks past this cosine distance from the question are dropped, so an
+    # off-topic query returns no sources instead of citing random text. Tuned
+    # against text-embedding-3-small: real clause questions land ~0.55-0.78,
+    # unrelated ("capital of France") ~0.95+.
+    retrieval_max_distance: float = 0.85
+
     max_upload_bytes: int = 25 * 1024 * 1024
 
     @property

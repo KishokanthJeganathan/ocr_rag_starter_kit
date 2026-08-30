@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 from app.models.base import Base
+from app.models.chunk import DocumentChunk
 from app.models.document import Document
 from app.models.enums import DocumentStatus, DocumentType, SourceFormat
 from app.models.extraction import DocumentExtraction
@@ -15,6 +16,7 @@ from app.models.validation import DocumentValidation
 __all__ = [
     "Base",
     "Document",
+    "DocumentChunk",
     "DocumentExtraction",
     "DocumentLayout",
     "DocumentStatus",

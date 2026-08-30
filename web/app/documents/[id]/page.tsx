@@ -7,6 +7,7 @@ import {
   type Cell,
 } from "@/app/lib/api";
 import { AutoRefresh } from "./auto-refresh";
+import { AskBox } from "@/app/ask/ask-box";
 
 export const dynamic = "force-dynamic";
 
@@ -69,6 +70,11 @@ export default async function DocumentDetailPage({
         {` · ${pageCount} page${pageCount === 1 ? "" : "s"}`}
         {` · ${new Date(document.created_at).toLocaleString()}`}
       </p>
+
+      <section className="ask-panel">
+        <h2>Ask this document</h2>
+        <AskBox documentId={id} placeholder="e.g. What is the term? Who signs?" />
+      </section>
 
       <div className="detail-grid">
         <div className="pages">
