@@ -1,0 +1,38 @@
+"""DocumentLayout — the OCR result for one document.
+
+One row per document (replaced on re-OCR). ``layout`` holds the normalized
+structure: ``{"pages": [{"number", "width", "height", "image_key",
+"blocks": [{"text", "bbox", "confidence", "role"}]}]}``.
+"""
+
+from __future__ import annotations
+
+import datetime as dt
+import uuid
+from typing import Any
+
+from sqlalchemy import DateTime, ForeignKey, Integer, String, func
+from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.orm import Mapped, mapped_column
+
+from app.models.base import Base
+
+
+class DocumentLayout(Base):
+    __tablename__ = "document_layouts"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    tenant_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("tenants.id", ondelete="CASCADE"), index=True, nullable=False
+    )
+    document_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("documents.id", ondelete="CASCADE"), unique=True, nullable=False
+    )
+
+    engine: Mapped[str] = mapped_column(String(32), nullable=False)
+    page_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    layout: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+
+    created_at: Mapped[dt.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )

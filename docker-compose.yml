@@ -1,0 +1,120 @@
+name: ocr-rag
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: ocr_rag
+    ports:
+      # Host port 5433 to avoid colliding with a native Postgres on 5432.
+      # Containers on the compose network still use postgres:5432.
+      - "127.0.0.1:5433:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./infra/postgres/init.sql:/docker-entrypoint-initdb.d/00-init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d ocr_rag"]
+      interval: 5s
+      timeout: 5s
+      retries: 15
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 15
+
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - miniodata:/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://127.0.0.1:9000/minio/health/live || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  createbuckets:
+    image: minio/mc:latest
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      mc alias set local http://minio:9000 minioadmin minioadmin &&
+      mc mb --ignore-existing local/ocr-rag-documents &&
+      echo 'bucket ocr-rag-documents ready'
+      "
+
+  api:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    environment:
+      ENVIRONMENT: local
+      DATABASE_URL: postgresql+psycopg://ocr_app:ocr_app@postgres:5432/ocr_rag
+      REDIS_URL: redis://redis:6379/0
+      # From the repo-root .env if set, else MinIO defaults.
+      S3_ENDPOINT_URL: ${S3_ENDPOINT_URL-http://minio:9000}
+      S3_REGION: ${S3_REGION-us-east-1}
+      S3_BUCKET: ${S3_BUCKET-ocr-rag-documents}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID-minioadmin}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY-minioadmin}
+      OPENAI_API_KEY: ${OPENAI_API_KEY-}
+    volumes:
+      - ./backend:/app
+    ports:
+      - "8000:8000"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://127.0.0.1:8000/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  worker:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    command: arq app.worker.WorkerSettings
+    environment:
+      ENVIRONMENT: local
+      DATABASE_URL: postgresql+psycopg://ocr_app:ocr_app@postgres:5432/ocr_rag
+      REDIS_URL: redis://redis:6379/0
+      S3_ENDPOINT_URL: ${S3_ENDPOINT_URL-http://minio:9000}
+      S3_REGION: ${S3_REGION-us-east-1}
+      S3_BUCKET: ${S3_BUCKET-ocr-rag-documents}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID-minioadmin}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY-minioadmin}
+      OPENAI_API_KEY: ${OPENAI_API_KEY-}
+    volumes:
+      - ./backend:/app
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  # web:  # added in Stage 7 (Next.js review UI)
+
+volumes:
+  pgdata:
+  miniodata:
