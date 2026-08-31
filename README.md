@@ -261,5 +261,5 @@ infra/      Postgres bootstrap
 ## Contact
 
 If your team has documents that need turning into structured data — extraction,
-validation, a review workflow, or retrieval over a corpus — get in touch:
-_email · LinkedIn · calendar link_.
+validation, a review workflow, or retrieval over a corpus — reach out on
+[LinkedIn](https://www.linkedin.com/in/kishokanthjeganathan/).
