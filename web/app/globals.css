@@ -458,13 +458,44 @@ h2 {
   font-size: 13px;
 }
 
-.ask-sources a {
+.ask-sources-label {
+  margin: 14px 0 6px;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+}
+
+.ask-sources li {
+  margin-bottom: 14px;
+}
+
+.ask-src-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: baseline;
+}
+
+.ask-src-head {
   color: var(--accent);
   font-weight: 600;
 }
 
-.ask-snippet {
-  display: block;
+.ask-dist {
   color: var(--muted);
-  margin-top: 2px;
+  font-variant-numeric: tabular-nums;
+  font-size: 12px;
+}
+
+.ask-chunk {
+  white-space: pre-wrap;
+  word-break: break-word;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 8px 10px;
+  margin: 6px 0 0;
+  font-size: 12px;
+  line-height: 1.5;
 }

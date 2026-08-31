@@ -12,8 +12,6 @@ from openai import OpenAI
 from app.config import settings
 from app.services.retrieve import RetrievedChunk
 
-_SNIPPET_CHARS = 240
-
 _SYSTEM_PROMPT = (
     "You answer questions about the user's documents using only the numbered "
     "sources below. Cite the sources you rely on inline as [S1], [S2], and so on. "
@@ -28,7 +26,8 @@ class Source:
     document_id: str
     filename: str
     page: int
-    snippet: str
+    distance: float  # cosine distance from the question (lower = closer)
+    text: str  # the exact chunk text put in the prompt
 
 
 @dataclass(frozen=True)
@@ -55,7 +54,8 @@ def generate_answer(question: str, chunks: list[RetrievedChunk]) -> Answer:
                 document_id=str(chunk.document_id),
                 filename=chunk.filename,
                 page=chunk.page,
-                snippet=chunk.text[:_SNIPPET_CHARS].strip(),
+                distance=round(chunk.distance, 4),
+                text=chunk.text,
             )
         )
 

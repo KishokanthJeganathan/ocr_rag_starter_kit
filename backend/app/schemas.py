@@ -49,7 +49,8 @@ class SourceOut(BaseModel):
     document_id: str
     filename: str
     page: int
-    snippet: str
+    distance: float
+    text: str
 
 
 class AskResponse(BaseModel):

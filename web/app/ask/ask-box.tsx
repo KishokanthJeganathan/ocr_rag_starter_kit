@@ -40,16 +40,28 @@ export function AskBox({
         <div className="ask-answer">
           <p className="ask-answer-text">{state.answer}</p>
           {state.sources.length > 0 && (
-            <ol className="ask-sources">
-              {state.sources.map((s) => (
-                <li key={s.n}>
-                  <Link href={`/documents/${s.document_id}`}>
-                    [S{s.n}] {s.filename} · p.{s.page}
-                  </Link>
-                  <span className="ask-snippet">{s.snippet}</span>
-                </li>
-              ))}
-            </ol>
+            <>
+              <p className="ask-sources-label">
+                {state.sources.length} chunk
+                {state.sources.length === 1 ? "" : "s"} sent to the model
+              </p>
+              <ol className="ask-sources">
+                {state.sources.map((s) => (
+                  <li key={s.n}>
+                    <div className="ask-src-row">
+                      <Link
+                        href={`/documents/${s.document_id}`}
+                        className="ask-src-head"
+                      >
+                        [S{s.n}] {s.filename} · p.{s.page}
+                      </Link>
+                      <span className="ask-dist">d={s.distance.toFixed(3)}</span>
+                    </div>
+                    <pre className="ask-chunk">{s.text}</pre>
+                  </li>
+                ))}
+              </ol>
+            </>
           )}
         </div>
       )}

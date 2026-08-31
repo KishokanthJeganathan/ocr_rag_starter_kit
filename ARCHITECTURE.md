@@ -73,7 +73,9 @@ in a read-only UI.** An editable review workflow is not here yet.
   GET  /v1/documents/{id}               -> the document row (status, doc_type, ...)
   GET  /v1/documents                    -> this tenant's documents
   POST /v1/ask   {question, document_id?}  -> embed q -> pgvector nearest chunks
-                                              -> LLM answer + [S1]-style sources
+                                              -> LLM answer + [S1] sources
+                                              (each: filename, page, distance,
+                                               and the full chunk text sent to the LLM)
 ```
 
 ## Every file
@@ -138,7 +140,7 @@ in a read-only UI.** An editable review workflow is not here yet.
 | `app/lib/api.ts` | typed `fetch` wrappers + response types, tenant/matter ids |
 | `app/page.tsx` | document list with verdict badges + "New NDA" link |
 | `app/new/page.tsx` + `actions.ts` | the generate form + its server action (`POST /synthetic` → redirect) |
-| `app/ask/page.tsx` + `ask-box.tsx` + `actions.ts` | corpus Q&A page; `AskBox` (client) is reused on the detail page |
+| `app/ask/page.tsx` + `ask-box.tsx` + `actions.ts` | corpus Q&A page; `AskBox` (client) is reused on the detail page. Each answer lists the chunks sent to the model — expandable full text + cosine distance |
 | `app/documents/[id]/page.tsx` | detail: Ask panel, then page images ∥ fields (value·confidence·evidence) + issues |
 | `app/documents/[id]/auto-refresh.tsx` | client component — polls `router.refresh()` while a doc is in flight |
 | `app/documents/[id]/pages/[page]/route.ts` | proxies the page PNG, adds the tenant header |

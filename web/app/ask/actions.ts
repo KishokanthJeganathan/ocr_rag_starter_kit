@@ -7,7 +7,8 @@ export type Source = {
   document_id: string;
   filename: string;
   page: number;
-  snippet: string;
+  distance: number;
+  text: string;
 };
 
 export type AskState =
